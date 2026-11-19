@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 
-type IconName = 'grid' | 'route' | 'book' | 'chart' | 'spark' | 'check' | 'award' | 'users' | 'layers' | 'network' | 'bell' | 'settings' | 'search' | 'chevron' | 'arrow' | 'menu' | 'pause' | 'play' | 'reset' | 'calendar' | 'filter' | 'clock' | 'more' | 'download' | 'target' | 'activity' | 'shield' | 'bolt' | 'close' | 'external' | 'message';
+type IconName = 'grid' | 'route' | 'book' | 'chart' | 'spark' | 'check' | 'award' | 'users' | 'layers' | 'network' | 'bell' | 'settings' | 'search' | 'chevron' | 'arrow' | 'menu' | 'pause' | 'play' | 'reset' | 'calendar' | 'filter' | 'clock' | 'more' | 'download' | 'target' | 'activity' | 'shield' | 'bolt' | 'close' | 'external' | 'message' | 'sun' | 'moon' | 'logout';
 const iconPaths: Record<IconName, ReactNode> = {
   grid: <><rect x="3" y="3" width="7" height="7" rx="1.6"/><rect x="14" y="3" width="7" height="7" rx="1.6"/><rect x="3" y="14" width="7" height="7" rx="1.6"/><rect x="14" y="14" width="7" height="7" rx="1.6"/></>,
   route: <><circle cx="6" cy="6" r="2"/><circle cx="18" cy="18" r="2"/><path d="M8 6h7a4 4 0 0 1 0 8H9a4 4 0 0 0 0 8h7"/></>,
@@ -31,6 +31,9 @@ const iconPaths: Record<IconName, ReactNode> = {
   close: <><path d="M5 5 19 19M19 5 5 19"/></>,
   external: <><path d="M13 4h7v7M20 4l-9 9M20 14v6H4V4h6"/></>,
   message: <><path d="M4 4h16v12H8l-4 4V4Z"/></>,
+  sun: <><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42"/></>,
+  moon: <><path d="M20.5 14.4A8.8 8.8 0 0 1 9.6 3.5 8.8 8.8 0 1 0 20.5 14.4Z"/></>,
+  logout: <><path d="M9 4H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4M14 7l5 5-5 5m5-5H9"/></>,
 };
 function Icon({ name, size = 19, className = '' }: { name: IconName; size?: number; className?: string }) {
   return <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{iconPaths[name]}</svg>;
@@ -189,24 +192,45 @@ function SecondaryPage({ section, onNavigate, running, onToggle }: { section: st
 export default function App() {
   const [section, setSection] = useState('dashboard');
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
+    try { return localStorage.getItem('edumaster-theme') === 'light' ? 'light' : 'dark'; }
+    catch { return 'dark'; }
+  });
   const [running, setRunning] = useState(true);
   const [period, setPeriod] = useState('30 días');
   const [globalSearch, setGlobalSearch] = useState('');
   const [notificationOpen, setNotificationOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  useEffect(() => {
+    document.documentElement.dataset.edumasterTheme = theme;
+    try { localStorage.setItem('edumaster-theme', theme); } catch { /* La interfaz sigue funcionando sin almacenamiento local. */ }
+  }, [theme]);
   const page = PAGE[section] ?? PAGE.dashboard;
   const navigate = (id:string) => {setSection(id);setMobileOpen(false);setSearchOpen(false);setNotificationOpen(false);setProfileOpen(false);window.scrollTo({top:0,behavior:'smooth'});};
+  const toggleSidebar = () => {
+    if (window.matchMedia('(max-width: 780px)').matches) setMobileOpen(open => !open);
+    else setSidebarCollapsed(collapsed => !collapsed);
+  };
   const searchResults = useMemo(()=>navigation.filter(n=>n.label.toLowerCase().includes(globalSearch.toLowerCase())),[globalSearch]);
+  const menuExpanded = window.matchMedia('(max-width: 780px)').matches ? mobileOpen : !sidebarCollapsed;
   const date = new Intl.DateTimeFormat('es-PE',{day:'numeric',month:'long',year:'numeric',timeZone:'America/Lima'}).format(new Date());
-  return <div className="app-shell">
+  return <div className={`app-shell theme-${theme} ${sidebarCollapsed ? 'app-shell--sidebar-collapsed' : ''}`}>
     {mobileOpen && <button className="mobile-overlay" aria-label="Cerrar menú" onClick={()=>setMobileOpen(false)}/>}
-    <aside className={`sidebar ${mobileOpen?'sidebar--open':''}`}><div className="brand"><div className="brand-mark"><span>e</span><i/></div><div className="brand-word"><strong>edumaster<span>.ai</span></strong><small>INTELLIGENT LEARNING</small></div><button className="mobile-close" onClick={()=>setMobileOpen(false)} aria-label="Cerrar menú"><Icon name="close"/></button></div>
+    <aside id="edumaster-sidebar" className={`sidebar ${mobileOpen?'sidebar--open':''} ${sidebarCollapsed?'sidebar--collapsed':''}`}><div className="brand"><div className="brand-mark"><span>e</span><i/></div><div className="brand-word"><strong>edumaster<span>.ai</span></strong><small>INTELLIGENT LEARNING</small></div><button className="mobile-close" onClick={()=>setMobileOpen(false)} aria-label="Cerrar menú"><Icon name="close"/></button></div>
       <div className="workspace-card"><span className="workspace-avatar">E</span><div><small>ESPACIO DE TRABAJO</small><strong>EduMaster Demo</strong></div><Icon name="chevron" size={15}/></div>
       <nav className="sidebar-nav" aria-label="Navegación principal">{(['principal','academico','inteligencia','sistema'] as const).map(g=><div className="nav-group" key={g}><div className="nav-group-title">{g==='principal'?'GENERAL':g==='academico'?'ACADÉMICO':g==='inteligencia'?'INTELIGENCIA':'GESTIÓN'}</div>{navigation.filter(n=>n.group===g).map(n=><button key={n.id} className={`nav-link ${section===n.id?'nav-link--active':''}`} onClick={()=>navigate(n.id)} aria-current={section===n.id?'page':undefined}><Icon name={n.icon} size={18}/><span>{n.label}</span>{n.id==='tutor'&&<i className="nav-new">AI</i>}</button>)}</div>)}</nav>
       <div className="sidebar-bottom"><div className="sidebar-upgrade"><span className="upgrade-star"><Icon name="spark" size={17}/></span><strong>Aprende sin límites</strong><p>Una experiencia diseñada para descubrir tu potencial.</p><span className="upgrade-lines"/></div><div className="sidebar-profile"><span className="profile-avatar">EM</span><div><strong>Vista de demostración</strong><small>Administrador · DEMO</small></div><Icon name="more" size={17}/></div></div>
     </aside>
-    <div className="main-column"><header className="topbar"><div className="topbar-left"><button className="mobile-menu icon-button" onClick={()=>setMobileOpen(true)} aria-label="Abrir menú"><Icon name="menu"/></button><div className="breadcrumbs"><span>EduMaster</span><span className="slash">/</span><strong>{page.title}</strong></div></div><div className="topbar-right"><span className="live-indicator"><i/> Sistema DEMO</span><div className="topbar-divider"/><div className="header-search"><Icon name="search" size={17}/><input aria-label="Buscar sección" placeholder="Buscar en la plataforma..." value={globalSearch} onFocus={()=>setSearchOpen(true)} onChange={e=>{setGlobalSearch(e.target.value);setSearchOpen(true)}}/><kbd>⌘ K</kbd>{searchOpen&&globalSearch&&<div className="search-popover">{searchResults.length?searchResults.map(n=><button key={n.id} onClick={()=>{navigate(n.id);setGlobalSearch('')}}><Icon name={n.icon} size={17}/>{n.label}</button>):<p>Sin secciones coincidentes</p>}</div>}</div><div className="popover-anchor"><button className="header-icon" aria-label="Notificaciones" onClick={()=>{setNotificationOpen(!notificationOpen);setProfileOpen(false)}}><Icon name="bell" size={19}/><i/></button>{notificationOpen&&<div className="header-popover"><strong>Notificaciones</strong><p>Los avisos son de demostración. El flujo en tiempo real se conectará después.</p><button onClick={()=>navigate('activity')}>Ir a actividad <Icon name="arrow" size={14}/></button></div>}</div><div className="popover-anchor"><button className="top-avatar" aria-label="Abrir perfil" onClick={()=>{setProfileOpen(!profileOpen);setNotificationOpen(false)}}>EM</button>{profileOpen&&<div className="header-popover profile-popover"><strong>Vista de demostración</strong><p>Administrador · EduMaster Demo</p><span>La autenticación se implementará en la fase de base funcional.</span></div>}</div></div></header>
+    <div className="main-column"><header className="topbar"><div className="topbar-left">
+      <button className="sidebar-toggle icon-button" onClick={toggleSidebar} aria-controls="edumaster-sidebar" aria-label={menuExpanded ? 'Ocultar menú lateral' : 'Mostrar menú lateral'} aria-expanded={menuExpanded} title="Mostrar u ocultar menú"><Icon name="menu" size={20}/></button>
+      <div className="breadcrumbs"><span>EduMaster</span><span className="slash">/</span><strong>{page.title}</strong></div></div>
+      <div className="topbar-right"><span className="live-indicator"><i/> Sistema DEMO</span><div className="topbar-divider"/>
+      <div className="header-search"><Icon name="search" size={17}/><input aria-label="Buscar sección" placeholder="Buscar en la plataforma..." value={globalSearch} onFocus={()=>setSearchOpen(true)} onChange={e=>{setGlobalSearch(e.target.value);setSearchOpen(true)}}/><kbd>⌘ K</kbd>{searchOpen&&globalSearch&&<div className="search-popover">{searchResults.length?searchResults.map(n=><button key={n.id} onClick={()=>{navigate(n.id);setGlobalSearch('')}}><Icon name={n.icon} size={17}/>{n.label}</button>):<p>Sin secciones coincidentes</p>}</div>}</div>
+      <button className="header-icon theme-toggle" onClick={()=>setTheme(current=>current==='dark'?'light':'dark')} aria-label={theme==='dark'?'Activar modo claro':'Activar modo oscuro'} aria-pressed={theme==='light'} title={theme==='dark'?'Cambiar a modo claro':'Cambiar a modo oscuro'}><Icon name={theme==='dark'?'sun':'moon'} size={19}/></button>
+      <div className="popover-anchor"><button className="header-icon" aria-label="Notificaciones" onClick={()=>{setNotificationOpen(!notificationOpen);setProfileOpen(false)}}><Icon name="bell" size={19}/><i/></button>{notificationOpen&&<div className="header-popover"><strong>Notificaciones</strong><p>Los avisos son de demostración. El flujo en tiempo real se conectará después.</p><button onClick={()=>navigate('activity')}>Ir a actividad <Icon name="arrow" size={14}/></button></div>}</div>
+      <div className="popover-anchor"><button className="top-avatar" aria-label="Abrir perfil" aria-expanded={profileOpen} onClick={()=>{setProfileOpen(!profileOpen);setNotificationOpen(false)}}>EM</button>{profileOpen&&<div className="header-popover profile-popover"><strong>Vista de demostración</strong><p>Administrador · EduMaster Demo</p><span>La autenticación se implementará en la fase de base funcional.</span><div className="profile-popover-divider"/><button className="logout-button" disabled title="Disponible cuando se implemente la autenticación"><Icon name="logout" size={16}/> Cerrar sesión <small>Próximamente</small></button></div>}</div></div></header>
       <main className="content"><div className="page-heading"><div><span className="page-eyebrow"><span/> {page.eyebrow}</span><h1>{page.title}<span className="heading-period">.</span></h1><p>{page.desc}</p></div><div className="heading-actions"><Demo/><div className="date-pill"><Icon name="calendar" size={16}/>{date}</div></div></div>{section==='dashboard'?<FuturisticDashboard onNavigate={navigate} running={running} onToggle={()=>setRunning(!running)} period={period} onPeriod={setPeriod}/>:<SecondaryPage key={section} section={section} onNavigate={navigate} running={running} onToggle={()=>setRunning(!running)}/>}<footer className="footer"><span>© {new Date().getFullYear()} EduMaster.ai · Aprende · Practica · Destaca</span><span>Vista visual de demostración · Sin datos reales conectados</span></footer></main>
     </div>
   </div>;
