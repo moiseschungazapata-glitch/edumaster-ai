@@ -69,3 +69,23 @@ html[data-edumaster-theme='light'] body{background:#eaf3fd}.theme-light{color:#1
 @media(max-width:410px){.login-brand .brand-word strong{font-size:16px}.login-brand .brand-word small{font-size:7px}.login-brand .brand-mark{width:36px;height:36px;font-size:28px}.login-theme{padding:9px}.login-theme span{display:none}.login-panel{padding:26px 20px}.login-visual{padding:24px 20px 17px}.login-visual h1{font-size:27px}.login-portal-label{letter-spacing:.1em}.login-footer span:last-child{display:none}}
 @media(prefers-reduced-motion:reduce){.login-ambient,.login-layout,.login-network,.login-lines,.login-node,.login-core,.login-orbit,.login-float,.login-error{animation:none!important}}
 .auth-loading{min-height:100vh;display:grid;place-items:center;background:#030d20;color:#78dff8;font:700 15px Manrope,sans-serif;letter-spacing:.04em}.auth-loading.theme-light{background:#ecf6ff;color:#156e9f}.login-submit:disabled{opacity:.6;transform:none;box-shadow:none}
+/* Academic workflows share the dashboard's panel palette and respect both themes. */
+.academic-page { display: grid; gap: 22px; padding-bottom: 24px; }
+.academic-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 310px), 1fr)); gap: 18px; }
+.academic-panel { padding: 24px; min-width: 0; }
+.academic-panel h2 { margin: 12px 0; font-size: 1.3rem; }
+.academic-panel h3 { margin: 24px 0 12px; }
+.academic-panel p { line-height: 1.6; }
+.academic-panel ol { padding-left: 23px; line-height: 2; }
+.academic-panel .primary-button, .academic-panel .outline-button { margin: 8px 8px 8px 0; }
+.academic-form { display: grid; align-content: start; gap: 14px; }
+.academic-form label { display: grid; gap: 7px; font-size: .88rem; }
+.academic-form input:not([type=checkbox]), .academic-form textarea, .academic-form select { width: 100%; padding: 11px 13px; border: 1px solid rgba(129,174,212,.35); border-radius: 10px; background: var(--panel-bg, rgba(11,27,51,.55)); color: inherit; font: inherit; }
+.academic-form textarea { min-height: 95px; resize: vertical; }
+.academic-form fieldset, .academic-item fieldset { border: 1px solid rgba(129,174,212,.35); border-radius: 10px; padding: 12px; }
+.academic-form fieldset label, .academic-item fieldset label { display: flex; align-items: center; gap: 9px; margin: 8px 0; }
+.academic-item { border-top: 1px solid rgba(129,174,212,.25); padding: 14px 0; }
+.academic-content { white-space: pre-wrap; overflow-wrap: anywhere; }
+.academic-link { background: transparent; border: 0; color: #58c8ee; cursor: pointer; font: inherit; text-align: left; text-decoration: underline; }
+.academic-message { padding: 14px 18px; border-radius: 10px; border: 1px solid #36bca0; }
+.academic-error { border-color: #f17a7a; }

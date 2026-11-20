@@ -65,4 +65,18 @@ GitHub Actions verifica ambas aplicaciones en cada push y pull request. Configur
 - `apps/api/tests/`: pruebas de acceso y roles.
 - `.github/workflows/ci.yml`: compilación web y pruebas de API.
 
-**Límite de fase:** el login y los permisos de API son reales una vez configurado Supabase; las pantallas de cursos, analítica, recomendaciones y la red neuronal siguen siendo ilustrativas.
+## Fase 2: núcleo académico
+
+La migración `0002_academic` crea cursos, lecciones, rutas ordenadas, matrículas, evaluaciones de opción múltiple, intentos y progreso. Una vez configurada la fase 1, ejecuta `alembic upgrade head` desde `apps/api` y reinicia FastAPI. Los estudiantes ven cursos publicados de su institución, se inscriben, leen lecciones, las completan y responden evaluaciones; el servidor calcula la nota y el porcentaje de avance. Los docentes crean borradores, añaden lecciones y evaluaciones, crean rutas y publican; un curso con matrículas no puede volver a borrador. Los administradores y coordinadores pueden gestionar los cursos de su institución. Las rutas solo incluyen cursos visibles para el usuario.
+
+Para probar con dos cuentas, crea una institución y asigna el mismo UUID al perfil de un docente y al de un estudiante en el SQL Editor (ajusta los UUID tras comprobar `SELECT id,email,role,institution_id FROM public.profiles`):
+
+```sql
+INSERT INTO public.institutions (id, name) VALUES (gen_random_uuid(), 'Institución DEMO') RETURNING id;
+UPDATE public.profiles SET role = 'teacher', institution_id = 'UUID-DE-LA-INSTITUCION' WHERE id = 'UUID-DEL-DOCENTE';
+UPDATE public.profiles SET role = 'student', institution_id = 'UUID-DE-LA-INSTITUCION' WHERE id = 'UUID-DEL-ESTUDIANTE';
+```
+
+Abre web y API, entra como docente y crea un curso con una lección y una evaluación; publícalo y crea una ruta. Entra como estudiante, inscríbete, completa la lección y aprueba la evaluación. Recarga: el porcentaje y los intentos siguen guardados. Prueba también que otra institución no vea ese curso. Ejecuta `python -m pytest -q` en `apps/api` y `npm.cmd run build` en `apps/web`. No pongas contraseñas en SQL ni en Git.
+
+**Límite de fase:** el login y los permisos de API necesitan la configuración real de Supabase. Cursos, rutas y evaluaciones consultan datos guardados; el dashboard, analítica, certificados, comunidad, recomendaciones y la red neuronal siguen mostrando datos DEMO de fases posteriores.
