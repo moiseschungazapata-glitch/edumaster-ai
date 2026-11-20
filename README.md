@@ -79,4 +79,14 @@ UPDATE public.profiles SET role = 'student', institution_id = 'UUID-DE-LA-INSTIT
 
 Abre web y API, entra como docente y crea un curso con una lección y una evaluación; publícalo y crea una ruta. Entra como estudiante, inscríbete, completa la lección y aprueba la evaluación. Recarga: el porcentaje y los intentos siguen guardados. Prueba también que otra institución no vea ese curso. Ejecuta `python -m pytest -q` en `apps/api` y `npm.cmd run build` en `apps/web`. No pongas contraseñas en SQL ni en Git.
 
-**Límite de fase:** el login y los permisos de API necesitan la configuración real de Supabase. Cursos, rutas y evaluaciones consultan datos guardados; el dashboard, analítica, certificados, comunidad, recomendaciones y la red neuronal siguen mostrando datos DEMO de fases posteriores.
+**Límite de fase 2:** el login y los permisos de API necesitan la configuración real de Supabase. Cursos, rutas y evaluaciones consultan datos guardados. Las fases siguientes conectan el dashboard y los módulos de IA.
+
+## Fase 3: dashboard y eventos en tiempo real
+
+Después de configurar la fase 1 y aplicar la fase 2, ejecuta `alembic upgrade head` nuevamente: `0003_dashboard_events` añade fechas a matrículas, lecciones completadas e intentos, y crea un registro de eventos con acceso restringido al servidor. Las acciones académicas nuevas escriben el evento en la misma transacción. Los registros anteriores a esta migración reciben la fecha de la migración; su actividad histórica no puede reconstruirse.
+
+`GET /api/v1/dashboard?days=7|30|90&course_id=UUID` devuelve indicadores, siete intervalos de actividad y eventos recientes, siempre limitados por institución y rol. `course_id` es opcional. Los estudiantes solo ven su actividad; los docentes, los cursos que imparten; administradores y coordinadores, su institución. La respuesta contiene `source` y `generated_at`. El porcentaje de finalización toma las matrículas creadas durante el periodo y considera completada una matrícula cuando todas sus lecciones están hechas y todas sus evaluaciones aprobadas. Los cursos publicados son el total actual; las demás tarjetas indican acciones o matrículas del periodo.
+
+`GET /api/v1/dashboard/stream?after=ID` ofrece eventos SSE con token Bearer mediante `fetch` (EventSource estándar no envía el encabezado Authorization). El navegador reconecta con el último ID recibido y además consulta el resumen cada minuto si no hay conexión persistente. En producción, el proxy de la API debe permitir respuestas SSE sin buffering y mantener la conexión abierta. Para verificarlo, entra como docente y estudiante, crea un curso, inscríbete y completa una lección: el resumen y la campana se actualizan en ambas sesiones sin recargar. Revisa los filtros de periodo y curso, y comprueba que un usuario de otra institución no vea sus datos. Ejecuta `python -m pytest -q` en `apps/api` y `npm.cmd run build` en `apps/web`.
+
+Dashboard, analítica y actividad muestran datos académicos guardados. Los módulos de mapa de habilidades, IA, recomendaciones y certificados siguen marcados como DEMO hasta fases posteriores.

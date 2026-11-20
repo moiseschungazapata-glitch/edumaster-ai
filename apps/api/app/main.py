@@ -14,6 +14,7 @@ from app.core.db import get_db
 from app.core.models import Profile
 from app.core.security import get_current_profile, require_roles
 from app.academic import router as academic_router
+from app.dashboard import router as dashboard_router
 
 logger = logging.getLogger("edumaster.api")
 logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -21,6 +22,7 @@ logging.basicConfig(level=logging.INFO, format="%(message)s")
 app = FastAPI(title="EduMaster.ai API", version="0.1.0", docs_url="/docs", openapi_url="/openapi.json")
 app.add_middleware(CORSMiddleware, allow_origins=allowed_origins(), allow_credentials=False, allow_methods=["GET", "POST", "PATCH", "DELETE"], allow_headers=["Authorization", "Content-Type", "X-Request-ID"])
 app.include_router(academic_router, prefix="/api/v1")
+app.include_router(dashboard_router, prefix="/api/v1")
 
 
 @app.middleware("http")

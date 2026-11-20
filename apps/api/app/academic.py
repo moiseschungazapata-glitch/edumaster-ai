@@ -9,11 +9,15 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.db import get_db
-from app.core.models import Activity, Attempt, Course, Enrollment, LearningPath, Lesson, LessonProgress, PathCourse, Profile
+from app.core.models import AcademicEvent, Activity, Attempt, Course, Enrollment, LearningPath, Lesson, LessonProgress, PathCourse, Profile
 from app.core.security import get_current_profile
 
 router = APIRouter(tags=["academic"])
 EDITORS = {"superadmin", "admin", "coordinator", "teacher"}
+
+
+def record(db: Session, profile: Profile, kind: str, course_id: uuid.UUID | None = None):
+    db.add(AcademicEvent(institution_id=institution(profile), actor_id=profile.id, course_id=course_id, kind=kind))
 
 
 class CourseInput(BaseModel):
@@ -108,6 +112,8 @@ def create_course(data: CourseInput, profile: Profile = Depends(get_current_prof
     editor(profile)
     course = Course(institution_id=institution(profile), teacher_id=profile.id, title=data.title.strip(), description=data.description.strip())
     db.add(course)
+    db.flush()
+    record(db, profile, "course_created", course.id)
     db.commit()
     db.refresh(course)
     return summary(db, course, profile)
@@ -142,6 +148,7 @@ def publish(course_id: uuid.UUID, profile: Profile = Depends(get_current_profile
     if not db.scalar(select(Lesson.id).where(Lesson.course_id == course_id).limit(1)):
         raise HTTPException(409, "Añade al menos una lección antes de publicar")
     course.published = True
+    record(db, profile, "course_published", course.id)
     db.commit()
     return summary(db, course, profile)
 
@@ -193,6 +200,7 @@ def enroll(course_id: uuid.UUID, profile: Profile = Depends(get_current_profile)
     if db.scalar(select(Enrollment).where(Enrollment.course_id == course.id, Enrollment.student_id == profile.id)):
         raise HTTPException(409, "Ya estás matriculado")
     db.add(Enrollment(course_id=course.id, student_id=profile.id))
+    record(db, profile, "enrolled", course.id)
     try:
         db.commit()
     except IntegrityError as exc:
@@ -209,6 +217,7 @@ def complete_lesson(course_id: uuid.UUID, lesson_id: uuid.UUID, profile: Profile
         raise HTTPException(404, "Lección no encontrada")
     if not db.scalar(select(LessonProgress.id).where(LessonProgress.lesson_id == lesson_id, LessonProgress.enrollment_id == enrollment.id)):
         db.add(LessonProgress(lesson_id=lesson_id, enrollment_id=enrollment.id))
+        record(db, profile, "lesson_completed", course.id)
         try:
             db.commit()
         except IntegrityError:
@@ -228,6 +237,7 @@ def submit_answer(course_id: uuid.UUID, activity_id: uuid.UUID, data: AnswerInpu
     score = 100 if data.selected_index == activity.correct_index else 0
     attempt = Attempt(activity_id=activity_id, enrollment_id=enrollment.id, selected_index=data.selected_index, score=score)
     db.add(attempt)
+    record(db, profile, "assessment_passed" if score >= activity.passing_score else "assessment_failed", course.id)
     db.commit()
     return {"id": attempt.id, "score": score, "passed": score >= activity.passing_score}
 
@@ -264,5 +274,6 @@ def create_path(data: PathInput, profile: Profile = Depends(get_current_profile)
     db.flush()
     for position, course_id in enumerate(data.course_ids, 1):
         db.add(PathCourse(path_id=path.id, course_id=course_id, position=position))
+    record(db, profile, "path_created")
     db.commit()
     return {"id": path.id, "title": path.title}
