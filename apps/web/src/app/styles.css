@@ -116,3 +116,11 @@ html[data-edumaster-theme='light'] body{background:#eaf3fd}.theme-light{color:#1
 @media (max-width: 900px) { .live-main { grid-template-columns: 1fr; } .live-kpis { grid-template-columns: repeat(2,minmax(0,1fr)); } }
 @media (max-width: 540px) { .live-kpis { grid-template-columns: 1fr; }.live-toolbar { padding: 16px; }.live-filters { width: 100%; }.live-filters label { flex: 1; }.live-filters select { width: 100%; }.live-events time { font-size: 11px; } }
 @media (prefers-reduced-motion: reduce) { .live-bar { transition: none; } }
+.analytics-page { display: grid; gap: 20px; }
+.analytics-page .live-filters { margin-top: 18px; justify-content: flex-start; flex-wrap: wrap; }
+.analytics-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+.analytics-metrics .academic-panel { margin: 0; }
+.analytics-metrics h2 { margin: 12px 0 0; color: #48cde9; }
+.analytics-page code { overflow-wrap: anywhere; }
+@media (max-width: 960px) { .analytics-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 540px) { .analytics-metrics { grid-template-columns: 1fr; } }

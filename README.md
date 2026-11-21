@@ -1,6 +1,6 @@
 # EduMaster.ai
 
-Monorepo de la plataforma educativa. La fase 1 incluye la base visual React, autenticación Supabase, API FastAPI, perfiles y roles en PostgreSQL, migración versionada, health checks y CI. Los módulos académicos, métricas e IA del dashboard todavía muestran datos **DEMO**; corresponden a las fases 2–6.
+Monorepo de la plataforma educativa. La fase 1 incluye la base visual React, autenticación Supabase, API FastAPI, perfiles y roles en PostgreSQL, migración versionada, health checks y CI. El núcleo académico, el dashboard y la analítica consultan datos guardados; el tutor de IA, las recomendaciones y las habilidades siguen como **DEMO** hasta sus fases posteriores.
 
 ## Requisitos
 
@@ -89,4 +89,24 @@ Después de configurar la fase 1 y aplicar la fase 2, ejecuta `alembic upgrade h
 
 `GET /api/v1/dashboard/stream?after=ID` ofrece eventos SSE con token Bearer mediante `fetch` (EventSource estándar no envía el encabezado Authorization). El navegador reconecta con el último ID recibido y además consulta el resumen cada minuto si no hay conexión persistente. En producción, el proxy de la API debe permitir respuestas SSE sin buffering y mantener la conexión abierta. Para verificarlo, entra como docente y estudiante, crea un curso, inscríbete y completa una lección: el resumen y la campana se actualizan en ambas sesiones sin recargar. Revisa los filtros de periodo y curso, y comprueba que un usuario de otra institución no vea sus datos. Ejecuta `python -m pytest -q` en `apps/api` y `npm.cmd run build` en `apps/web`.
 
-Dashboard, analítica y actividad muestran datos académicos guardados. Los módulos de mapa de habilidades, IA, recomendaciones y certificados siguen marcados como DEMO hasta fases posteriores.
+Dashboard y actividad muestran datos académicos guardados. La analítica de dataset se implementa en la fase 4. Los módulos de mapa de habilidades, IA, recomendaciones y certificados siguen marcados como DEMO hasta fases posteriores.
+
+## Fase 4: dataset y analítica
+
+La sección **Analítica educativa** consulta eventos reales de la institución, filtra por 7/30/90 días y curso y permite descargar un CSV agregado por día UTC y curso. Incluye matrícula, lecciones terminadas, evaluaciones aprobadas/no aprobadas y número de participantes activos por día. Muestra fuente, última actividad, versión SHA-256 y control de calidad. El acceso está limitado por institución: el estudiante ve sus propias acciones; el docente, sus cursos; administradores, coordinadores, analistas y auditores, su institución. La descarga no contiene correos ni identificadores de estudiantes. La API ofrece `GET /api/v1/analytics/report` y `GET /api/v1/analytics/export.csv`, ambos con token Bearer.
+
+El pipeline independiente usa el mismo esquema `academic-daily-v1` que el reporte. El dataset sintético de ejemplo está en `apps/api/data/demo_events.jsonl`, identificado explícitamente como DEMO. Ejecútalo desde `apps/api`:
+
+```powershell
+.\.venv\Scripts\python.exe -m app.dataset --source demo --out ..\..\data\analytics\demo
+```
+
+Para generar una instantánea de datos reales **solo de una institución autorizada**, con el backend configurado y migrado, usa:
+
+```powershell
+.\.venv\Scripts\python.exe -m app.dataset --source database --institution UUID-DE-TU-INSTITUCION --out ..\..\data\analytics\real
+```
+
+Cada ejecución escribe `daily_course_features.csv` y `manifest.json` en la carpeta indicada. El manifiesto documenta fuente, esquema, zona UTC, columnas, fecha máxima, volumen aceptado/rechazado, duplicados y hash del CSV. Mismo contenido produce la misma versión y los archivos generados en `data/analytics/` están ignorados por Git. La validación rechaza tipo de evento desconocido, identificadores inválidos, marca de tiempo sin zona, acciones sin curso e IDs repetidos; ante errores no escribe la instantánea. Los eventos anteriores a la fase 3 no tienen historial reconstruible. No se entrena un modelo ni se hacen recomendaciones en esta fase.
+
+Para cerrar fase 4, ejecuta `pytest -q` y `npm run build`; abre **Analítica educativa** con docente y estudiante y verifica filtros, totales, calidad y CSV. Prueba aislamiento con otra institución y confirma que el hash del manifiesto DEMO es idéntico al ejecutar dos veces. La base Supabase requiere la migración de fase 3, sin nueva migración en fase 4.
