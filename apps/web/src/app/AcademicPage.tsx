@@ -13,7 +13,7 @@ async function request<T>(path: string, method = 'GET', body?: unknown): Promise
   const session = (await supabase?.auth.getSession())?.data.session;
   if (!session) throw new Error('La sesión venció. Inicia sesión otra vez.');
   const response = await fetch(`${apiUrl?.replace(/\/$/, '')}/api/v1${path}`, {
-    method, headers: { Authorization: `Bearer ${session.access_token}`, ...(body ? { 'Content-Type': 'application/json' } : {}) },
+    method, signal: AbortSignal.timeout(15000), headers: { Authorization: `Bearer ${session.access_token}`, ...(body ? { 'Content-Type': 'application/json' } : {}) },
     ...(body ? { body: JSON.stringify(body) } : {}),
   });
   if (!response.ok) {
@@ -49,17 +49,24 @@ export default function AcademicPage({ section, profile }: { section: 'courses' 
   const editor = ['superadmin', 'admin', 'coordinator', 'teacher'].includes(profile.role);
 
   const reload = useCallback(async (id?: string | null) => {
-    const [newCourses, newPaths] = await Promise.all([request<Course[]>('/courses'), request<Path[]>('/paths')]);
-    setCourses(newCourses); setPaths(newPaths);
+    if (section === 'paths') {
+      const [newPaths, newCourses] = await Promise.all([
+        request<Path[]>('/paths'),
+        editor ? request<Course[]>('/courses') : Promise.resolve([] as Course[]),
+      ]);
+      setPaths(newPaths); setCourses(newCourses);
+    } else {
+      setCourses(await request<Course[]>('/courses'));
+    }
     if (id) {
       setDetail(await request<Detail>(`/courses/${id}`));
       if (profile.role === 'student') setAttempts(await request<Attempt[]>(`/courses/${id}/attempts`).catch(() => []));
     }
-  }, [profile.role]);
+  }, [section, editor, profile.role]);
   useEffect(() => {
     let active = true;
     setLoading(true);
-    void reload().catch(e => { if (active) setError((e as Error).message); }).finally(() => { if (active) setLoading(false); });
+    void reload().catch(e => { if (active) setError((e as Error).name === 'TimeoutError' ? 'La base de datos tardó demasiado en responder. Intenta entrar nuevamente.' : (e as Error).message); }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [reload]);
 

@@ -9,7 +9,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.academic import EDITORS, institution
+from app.academic import institution
 from app.core.db import engine, get_db
 from app.core.models import AcademicEvent, Activity, Attempt, Course, Enrollment, Lesson, LessonProgress, Profile
 from app.core.security import get_current_profile
@@ -56,6 +56,18 @@ def dashboard(days: int = Query(default=30, ge=1, le=90), course_id: uuid.UUID |
         if not courses:
             raise HTTPException(404, "Curso no encontrado")
     course_ids = [c.id for c in courses]
+    # A new institution has no courses yet. Avoid a dozen empty round trips to Postgres.
+    if not course_ids:
+        return {
+            "source": "PostgreSQL: courses, enrollments, lesson_progress, attempts, academic_events",
+            "generated_at": now.isoformat(), "period_days": days,
+            "metrics": {"published_courses": 0, "enrollments": 0, "students": 0, "completed_lessons": 0,
+                        "passed_assessments": 0, "completion_percent": 0, "completed_enrollments": 0},
+            "series": [{"start": (cutoff + timedelta(seconds=days * 86400 * index / 7)).isoformat(),
+                        "enrollments": 0, "lessons": 0, "passed_assessments": 0} for index in range(7)],
+            "recent_events": [],
+            "cursor": db.scalar(select(AcademicEvent.id).where(AcademicEvent.institution_id == institution(profile)).order_by(AcademicEvent.id.desc()).limit(1)) or 0,
+        }
     all_enrollments = list(db.scalars(select(Enrollment).where(Enrollment.course_id.in_(course_ids), *((Enrollment.student_id == profile.id,) if profile.role == "student" else ()))))
     enrollments = [entry for entry in all_enrollments if entry.created_at.replace(tzinfo=entry.created_at.tzinfo or timezone.utc) >= cutoff]
     enrollment_ids = [e.id for e in all_enrollments]
@@ -68,13 +80,13 @@ def dashboard(days: int = Query(default=30, ge=1, le=90), course_id: uuid.UUID |
     passed = {(a.enrollment_id, a.activity_id) for a in attempts if a.score >= passing.get(a.activity_id, 101)}
     total_by_course = {c.id: sum(lesson.course_id == c.id for lesson in lessons) + sum(activity.course_id == c.id for activity in activities) for c in courses}
     finished = sum(bool(total_by_course[e.course_id]) and sum((e.id, lesson.id) in done for lesson in lessons if lesson.course_id == e.course_id) + sum((e.id, activity.id) in passed for activity in activities if activity.course_id == e.course_id) == total_by_course[e.course_id] for e in enrollments)
-    events = list(db.scalars(event_query(profile, course_ids).where(AcademicEvent.occurred_at >= cutoff, AcademicEvent.course_id.in_(course_ids)).order_by(AcademicEvent.id.desc()).limit(15)))
-    # Seven chronological buckets, each sourced from dated academic events.
+    # One query supplies recent events and the seven chart buckets.
+    events = list(db.scalars(event_query(profile, course_ids).where(AcademicEvent.occurred_at >= cutoff, AcademicEvent.occurred_at < now, AcademicEvent.course_id.in_(course_ids)).order_by(AcademicEvent.id.desc())))
     buckets = []
     for index in range(7):
         start = cutoff + timedelta(seconds=days * 86400 * index / 7)
         end = cutoff + timedelta(seconds=days * 86400 * (index + 1) / 7)
-        bucket_events = list(db.scalars(event_query(profile, course_ids).where(AcademicEvent.occurred_at >= start, AcademicEvent.occurred_at < end, AcademicEvent.course_id.in_(course_ids))))
+        bucket_events = [event for event in events if start <= event.occurred_at.replace(tzinfo=event.occurred_at.tzinfo or timezone.utc) < end]
         buckets.append({"start": start.isoformat(), "enrollments": sum(e.kind == "enrolled" for e in bucket_events), "lessons": sum(e.kind == "lesson_completed" for e in bucket_events), "passed_assessments": sum(e.kind == "assessment_passed" for e in bucket_events)})
     return {
         "source": "PostgreSQL: courses, enrollments, lesson_progress, attempts, academic_events",
@@ -88,7 +100,7 @@ def dashboard(days: int = Query(default=30, ge=1, le=90), course_id: uuid.UUID |
             "completion_percent": round(100 * finished / len(enrollments)) if enrollments else 0,
             "completed_enrollments": finished,
         },
-        "series": buckets, "recent_events": [event_data(e) for e in events],
+        "series": buckets, "recent_events": [event_data(e) for e in events[:15]],
         "cursor": db.scalar(select(AcademicEvent.id).where(AcademicEvent.institution_id == institution(profile)).order_by(AcademicEvent.id.desc()).limit(1)) or 0,
     }
 

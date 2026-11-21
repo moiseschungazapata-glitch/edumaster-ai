@@ -10,7 +10,8 @@ from app.core.config import database_url
 
 @lru_cache
 def engine():
-    return create_engine(database_url(), pool_pre_ping=True, pool_size=5, max_overflow=5)
+    return create_engine(database_url(), pool_pre_ping=True, pool_size=5, max_overflow=5,
+                         pool_timeout=10, connect_args={"connect_timeout": 10})
 
 
 def get_db() -> Iterator[Session]:

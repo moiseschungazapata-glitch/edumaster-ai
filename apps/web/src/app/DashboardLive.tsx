@@ -11,7 +11,7 @@ type Course = { id: string; title: string };
 const apiUrl = import.meta.env.VITE_API_URL as string;
 const dateText = (value: string) => new Intl.DateTimeFormat('es-PE', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'America/Lima' }).format(new Date(value));
 
-export function useDashboard(profile: Profile | null) {
+export function useDashboard(profile: Profile | null, enabled = true) {
   const [days, setDays] = useState(30);
   const [courseId, setCourseId] = useState('');
   const [data, setData] = useState<DashboardData | null>(null);
@@ -23,7 +23,8 @@ export function useDashboard(profile: Profile | null) {
     const session = (await supabase?.auth.getSession())?.data.session;
     if (!session) throw new Error('La sesión venció. Vuelve a iniciar sesión.');
     const headers = { Authorization: `Bearer ${session.access_token}` };
-    const response = await fetch(`${apiUrl}/api/v1/dashboard?days=${days}${courseId ? `&course_id=${encodeURIComponent(courseId)}` : ''}`, { headers, signal });
+    const requestSignal = signal ? AbortSignal.any([signal, AbortSignal.timeout(15000)]) : AbortSignal.timeout(15000);
+    const response = await fetch(`${apiUrl}/api/v1/dashboard?days=${days}${courseId ? `&course_id=${encodeURIComponent(courseId)}` : ''}`, { headers, signal: requestSignal });
     if (!response.ok) throw new Error(`No se pudieron cargar los indicadores (${response.status}).`);
     const next = await response.json() as DashboardData;
     if (!signal?.aborted) { setData(next); setError(''); }
@@ -32,6 +33,7 @@ export function useDashboard(profile: Profile | null) {
 
   useEffect(() => {
     if (!profile) { setData(null); setCourses([]); setCourseId(''); setDays(30); setError(''); return; }
+    if (!enabled) return;
     const controller = new AbortController();
     void (async () => {
       try {
@@ -42,15 +44,15 @@ export function useDashboard(profile: Profile | null) {
       } catch { /* The dashboard error reports unavailable backend data. */ }
     })();
     return () => controller.abort();
-  }, [profile]);
+  }, [profile, enabled]);
 
   useEffect(() => {
-    if (!profile) return;
+    if (!profile || !enabled) return;
     const controller = new AbortController();
     let cursor = 0;
     const load = async () => {
       try { const next = await reload(controller.signal); if (next) cursor = Math.max(cursor, next.cursor); }
-      catch (e) { if (!controller.signal.aborted) setError((e as Error).message); }
+      catch (e) { if (!controller.signal.aborted) setError((e as Error).name === 'TimeoutError' ? 'La base de datos tardó demasiado en responder. Intenta actualizar.' : (e as Error).message); }
     };
     const interval = window.setInterval(() => void load(), 60000);
     const stream = async () => {
@@ -83,7 +85,7 @@ export function useDashboard(profile: Profile | null) {
     };
     void (async () => { await load(); if (!controller.signal.aborted) await stream(); })();
     return () => { controller.abort(); clearInterval(interval); setConnected(false); };
-  }, [profile, reload]);
+  }, [profile, enabled, reload]);
   return { data, courses, days, setDays, courseId, setCourseId, error, connected, reload };
 }
 

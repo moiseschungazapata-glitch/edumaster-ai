@@ -267,8 +267,8 @@ function LoginScreen({ onLogin, theme, onThemeChange }: {
 export default function App() {
   const [authState, setAuthState] = useState<'loading' | 'signedIn' | 'signedOut'>('loading');
   const [profile, setProfile] = useState<Profile | null>(null);
-  const dashboardState = useDashboard(profile);
   const [section, setSection] = useState('dashboard');
+  const dashboardState = useDashboard(profile, ['dashboard', 'analytics', 'activity'].includes(section));
   const [mobileOpen, setMobileOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
