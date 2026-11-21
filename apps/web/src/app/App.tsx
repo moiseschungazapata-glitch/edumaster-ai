@@ -317,7 +317,7 @@ export default function App() {
   const login = async (email: string, password: string) => {
     if (!supabase || !isConfigured) throw new Error('Configura Supabase y la API antes de iniciar sesión.');
     const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
-    if (error || !data.session) throw new Error('El correo o la contraseña no son correctos.');
+    if (error || !data.session) throw error instanceof Error ? error : new Error('No se pudo iniciar sesión.');
     try {
       const current = await loadProfile(data.session.access_token);
       setProfile(current);

@@ -38,7 +38,14 @@ async function tokenRequest(grantType: 'password' | 'refresh_token', body: objec
   const response = await fetch(`${url}/auth/v1/token?grant_type=${grantType}`, {
     method: 'POST', headers: { apikey: key, 'Content-Type': 'application/json' }, body: JSON.stringify(body),
   });
-  if (!response.ok) throw new Error('No se pudo iniciar o renovar la sesión.');
+  if (!response.ok) {
+    const problem = await response.json().catch(() => ({})) as { error_code?: string; code?: string; msg?: string };
+    const code = problem.error_code ?? problem.code;
+    if (code === 'email_not_confirmed' || /email not confirmed/i.test(problem.msg ?? '')) throw new Error('Confirma el correo de esta cuenta en Supabase antes de iniciar sesión.');
+    if (response.status === 429) throw new Error('Demasiados intentos. Espera unos minutos y vuelve a probar.');
+    if (response.status === 401 && code !== 'invalid_credentials') throw new Error('Revisa la clave pública y la URL de Supabase.');
+    throw new Error('El correo o la contraseña no son correctos.');
+  }
   const data: unknown = await response.json();
   if (typeof data !== 'object' || data === null || !('access_token' in data) || !('refresh_token' in data) || !('expires_in' in data)) throw new Error('Respuesta de autenticación incompleta.');
   const value = data as { access_token: string; refresh_token: string; expires_in: number };
