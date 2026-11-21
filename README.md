@@ -110,3 +110,42 @@ Para generar una instantánea de datos reales **solo de una institución autoriz
 Cada ejecución escribe `daily_course_features.csv` y `manifest.json` en la carpeta indicada. El manifiesto documenta fuente, esquema, zona UTC, columnas, fecha máxima, volumen aceptado/rechazado, duplicados y hash del CSV. Mismo contenido produce la misma versión y los archivos generados en `data/analytics/` están ignorados por Git. La validación rechaza tipo de evento desconocido, identificadores inválidos, marca de tiempo sin zona, acciones sin curso e IDs repetidos; ante errores no escribe la instantánea. Los eventos anteriores a la fase 3 no tienen historial reconstruible. No se entrena un modelo ni se hacen recomendaciones en esta fase.
 
 Para cerrar fase 4, ejecuta `pytest -q` y `npm run build`; abre **Analítica educativa** con docente y estudiante y verifica filtros, totales, calidad y CSV. Prueba aislamiento con otra institución y confirma que el hash del manifiesto DEMO es idéntico al ejecutar dos veces. La base Supabase requiere la migración de fase 3, sin nueva migración en fase 4.
+
+## Fase 5: modelo neuronal candidato (sin uso en producción)
+
+El pipeline offline de `app.ml.train` entrena una GRU PyTorch con una capa de fusión, LayerNorm y Dropout y cuatro cabezas: finalización, dominio en tres niveles, riesgo y ranking de tres recursos. Usa semillas fijas, normalización calculada **solo** con entrenamiento, separación temporal con purga de etiquetas futuras, regularización, scheduler y parada temprana. Compara resultados contra prevalencias del entrenamiento; evalúa ROC-AUC, PR-AUC, F1, recall, Brier, calibración y FPR para tareas binarias; macro-F1, balanced accuracy, MAE y confusión para dominio; NDCG@3, Recall@2 y cobertura para ranking. Reporta métricas por segmento.
+
+Instala las dependencias opcionales en el entorno API (pueden ocupar varios cientos de MB):
+
+```powershell
+cd C:\edumaster-ai\apps\api
+uv pip install --python .\.venv\Scripts\python.exe ".[ml]"
+.\.venv\Scripts\python.exe -m app.ml.train --source demo --out ..\..\data\models\demo
+```
+
+La ejecución DEMO genera `candidate.pt` (pesos y transformadores), `evaluation.json` (baseline y métricas), `history.json` (curvas), `model_card.md` (limitaciones) y `registry.json` (versión y estado no promovido). Registra parámetros, commit, métricas y artefactos en MLflow con SQLite local en `data/models/mlruns/`; esas salidas están ignoradas por Git. El comando imprime la versión SHA-256 del modelo y se puede repetir con el mismo `--seed` para comprobarla. La app sigue mostrando la red animada como **DEMO**: no está conectada a inferencia.
+
+**Datos reales:** el CSV agregado de fase 4 contiene una sola fila en la institución de prueba y no incluye objetivos futuros por estudiante. No sirve para entrenamiento supervisado. El modo `--source labeled --data ruta.jsonl --out ..\..\data\models\real` exige un archivo autorizado de al menos 100 alumnos con una instantánea por alumno. Cada línea JSONL debe seguir el esquema `student-sequence-supervised-v1`: `student_key` seudónimo único, `segment`, `as_of`, `feature_window_end`, `label_observed_at` con zona horaria, `sequence` de seis vectores de cuatro números [0,1] en el orden `progress,assessment,visits,inactive_days`, y `labels` con `completion` y `risk` binarios, `mastery` y `next_resource` entre 0 y 2. Las variables deben preceder al corte y las etiquetas deben madurar después. El pipeline bloquea duplicados, fechas futuras, falta de diversidad de clases, conjuntos demasiado pequeños y solapamiento temporal entre entrenamiento/validación/test. No uses datos personales ni un dataset que no esté autorizado para esta finalidad.
+
+El candidato real permanece `candidate_pending_human_review` incluso si mejora al baseline. La revisión técnica, docente, de privacidad, estabilidad y equidad por segmentos es necesaria antes de promoverlo a staging/shadow. No hay endpoint de inferencia, entrenamiento automático, publicación, calificaciones definitivas ni sanciones en esta fase. Con los datos actuales, solo está validado el **pipeline DEMO**; no es correcto declarar un modelo real listo para producción.
+
+## Fase 6: orientación y recomendaciones supervisadas
+
+Aplica la migración `0004_guidance` desde `apps/api` y reinicia la API:
+
+```powershell
+.\.venv\Scripts\alembic.exe upgrade head
+.\.venv\Scripts\uvicorn.exe app.main:app --reload --port 8000
+```
+
+La nueva tabla `recommendations` tiene RLS activado, sin políticas de acceso directo desde el navegador. El estudiante pulsa **Buscar sugerencias** en la sección **Recomendaciones**: la API usa cursos publicados, matrículas, lecciones y evaluaciones de su institución, guarda motivo, evidencia, impacto cualitativo, prioridad y vencimiento. La sugerencia aparece `pending` hasta que el docente de ese curso, o un coordinador/administrador institucional, la aprueba o rechaza con una nota opcional. El estudiante puede entonces aceptar, descartar o marcar realizada la sugerencia y dejar feedback útil/no útil. Los estados y la opinión persisten; la revisión docente ve aceptación y utilidad agregadas. El tutor de esta fase responde solo a preguntas sobre cursos y sugerencias aprobadas mediante reglas, sin enviar texto libre a un proveedor de IA.
+
+Los endpoints están bajo `/api/v1/guidance`: `POST/GET /recommendations` (el POST es `/recommendations/refresh`), `POST /recommendations/{id}/action`, `POST /recommendations/{id}/feedback`, `GET /reviews`, `POST /reviews/{id}` y `POST /tutor`. Requieren token Bearer, usan permisos y relación con institución/curso en la API; no aceptan identidad del estudiante desde el cliente. `GET /model/status` deja constancia de que el único modelo está en estado `demo_only` y `POST /model/predict` devuelve 503. No hay scores neuronales, calificaciones ni impacto numérico inventado en las recomendaciones de reglas.
+
+Prueba con dos cuentas: como estudiante, pulsa **Buscar sugerencias**; como docente, abre **Recomendaciones** y aprueba una sugerencia de tu curso; como estudiante, acepta, marca realizada y vota su utilidad; recarga y comprueba persistencia. Una tercera institución no debe poder revisar ni modificar esa sugerencia. Las pruebas automáticas cubren estos permisos y el bloqueo de inferencia del modelo DEMO.
+
+**Puerta de salida pendiente:** para convertir esto en inferencia neuronal y recomendaciones personalizadas validadas, primero hace falta una cohorte real etiquetada y autorizada, evaluación offline y segmentada, aprobación técnica y docente, una prueba controlada en staging/shadow, monitoreo y rollback. El dataset real actual tiene una sola fila agregada, de modo que la fase 6 no puede darse por completa como IA predictiva en producción. El estado de reglas y su feedback sí puede probarse ahora.
+
+## Fase 7: endurecimiento
+
+Los controles de auditoría, límite local de solicitudes y cabeceras de seguridad se describen junto con las pruebas de aceptación y recuperación en [la guía de fase 7](docs/phase7.md). Aplica la migración `0005_audit` con `alembic upgrade head` en tu entorno de pruebas antes de iniciar la API actualizada. La fase no se considera aceptada hasta completar los ensayos en staging y resolver las dependencias de datos reales e IA de las fases anteriores.

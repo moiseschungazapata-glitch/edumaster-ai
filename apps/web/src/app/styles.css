@@ -124,3 +124,12 @@ html[data-edumaster-theme='light'] body{background:#eaf3fd}.theme-light{color:#1
 .analytics-page code { overflow-wrap: anywhere; }
 @media (max-width: 960px) { .analytics-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 540px) { .analytics-metrics { grid-template-columns: 1fr; } }
+.guidance-page { display: grid; gap: 18px; }
+.guidance-page .academic-panel { margin: 0; }
+.guidance-page .academic-grid { align-items: stretch; }
+.guidance-question { margin: 20px 0; display: grid; gap: 10px; }
+.guidance-question > div { display: flex; gap: 10px; flex-wrap: wrap; }
+.guidance-question input { flex: 1; min-width: 200px; }
+.guidance-actions { display: flex; gap: 9px; flex-wrap: wrap; align-items: center; margin-top: 16px; }
+.guidance-page small { overflow-wrap: anywhere; }
+.guidance-review-note { width: 100%; display: grid; gap: 6px; }

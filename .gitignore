@@ -7,3 +7,5 @@ dist/
 __pycache__/
 *.pyc
 data/analytics/
+data/models/
+data/mlruns/

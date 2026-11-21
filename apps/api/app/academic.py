@@ -18,6 +18,8 @@ EDITORS = {"superadmin", "admin", "coordinator", "teacher"}
 
 def record(db: Session, profile: Profile, kind: str, course_id: uuid.UUID | None = None):
     db.add(AcademicEvent(institution_id=institution(profile), actor_id=profile.id, course_id=course_id, kind=kind))
+    from app.audit import record as audit_record
+    audit_record(db, profile, kind, "course" if course_id else "learning_path", course_id)
 
 
 class CourseInput(BaseModel):
@@ -137,6 +139,7 @@ def edit_course(course_id: uuid.UUID, data: CourseInput, profile: Profile = Depe
     course = course_or_404(db, profile, course_id)
     can_edit(profile, course)
     course.title, course.description = data.title.strip(), data.description.strip()
+    record(db, profile, "course_updated", course.id)
     db.commit()
     return summary(db, course, profile)
 
@@ -160,6 +163,7 @@ def unpublish(course_id: uuid.UUID, profile: Profile = Depends(get_current_profi
     if db.scalar(select(Enrollment.id).where(Enrollment.course_id == course_id).limit(1)):
         raise HTTPException(409, "No puedes cambiar un curso con estudiantes inscritos")
     course.published = False
+    record(db, profile, "course_unpublished", course.id)
     db.commit()
     return summary(db, course, profile)
 
@@ -173,6 +177,7 @@ def add_lesson(course_id: uuid.UUID, data: LessonInput, profile: Profile = Depen
     position = (db.scalar(select(func.max(Lesson.position)).where(Lesson.course_id == course_id)) or 0) + 1
     lesson = Lesson(course_id=course_id, title=data.title.strip(), content=data.content.strip(), position=position)
     db.add(lesson)
+    record(db, profile, "lesson_created", course_id)
     db.commit()
     return {"id": lesson.id, "position": position}
 
@@ -188,6 +193,7 @@ def add_activity(course_id: uuid.UUID, data: ActivityInput, profile: Profile = D
     position = (db.scalar(select(func.max(Activity.position)).where(Activity.course_id == course_id)) or 0) + 1
     activity = Activity(course_id=course_id, title=data.title.strip(), question=data.question.strip(), options_json=json.dumps([option.strip() for option in data.options]), correct_index=data.correct_index, position=position)
     db.add(activity)
+    record(db, profile, "activity_created", course_id)
     db.commit()
     return {"id": activity.id, "position": position}
 
