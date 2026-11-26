@@ -25,7 +25,7 @@ KINDS = {
     "course_updated", "course_unpublished", "teacher_assigned", "courses_imported", "courses_exported",
     "lesson_created", "lesson_updated", "lesson_restored", "unit_created", "resource_created", "resource_downloaded", "resource_deleted",
     "activity_created", "assessment_copied", "assessment_submitted", "submission_downloaded",
-    "path_published", "path_assigned", "cohort_created", "cohort_student_added", "cohort_enrolled",
+    "path_published", "path_updated", "path_assigned", "cohort_created", "cohort_student_added", "cohort_enrolled",
     "certificate_issued", "certificate_downloaded", "certificate_revoked", "certificate_reissued",
 }
 FEATURE_KINDS = {

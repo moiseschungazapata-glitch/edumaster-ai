@@ -17,7 +17,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, defer
 
 from app.core.db import get_db
-from app.core.models import AcademicEvent, Activity, Attempt, Certificate, Cohort, CohortMember, Course, CourseUnit, Enrollment, LearningPath, Lesson, LessonProgress, LessonResource, LessonVersion, PathAssignment, PathCourse, Profile
+from app.core.models import AcademicEvent, Activity, Attempt, Certificate, Cohort, CohortMember, Course, CourseUnit, Enrollment, LearningPath, Lesson, LessonProgress, LessonResource, LessonVersion, PathAssignment, PathCourse, PathVersion, Profile
 from app.core.security import get_current_profile
 
 router = APIRouter(tags=["academic"])
@@ -110,6 +110,7 @@ class GradeInput(BaseModel):
 
 class AssignPathInput(BaseModel):
     student_id: uuid.UUID
+    target_at: datetime | None = None
 
 
 class CohortInput(BaseModel):
@@ -122,6 +123,10 @@ class CohortStudentInput(BaseModel):
 
 class EnrollCohortInput(BaseModel):
     cohort_id: uuid.UUID
+
+
+class AssignPathCohortInput(EnrollCohortInput):
+    target_at: datetime | None = None
 
 
 class AssignTeacherInput(BaseModel):
@@ -756,11 +761,13 @@ def paths(profile: Profile = Depends(get_current_profile), db: Session = Depends
         if profile.role == "student" and not path.published:
             continue
         entries = db.execute(select(PathCourse, Course).join(Course, PathCourse.course_id == Course.id).where(PathCourse.path_id == path.id).order_by(PathCourse.position)).all()
-        visible = [course for _, course in entries if (course.published or profile.role in EDITORS) and (profile.role != "teacher" or course.teacher_id == profile.id)]
+        if profile.role == "teacher" and any(course.teacher_id != profile.id for _, course in entries):
+            continue
+        visible = [course for _, course in entries if course.published or profile.role in EDITORS]
         if profile.role in {"student", "teacher"} and not visible:
             continue
         assigned = list(db.scalars(select(PathAssignment.student_id).where(PathAssignment.path_id == path.id)).all()) if profile.role in EDITORS else []
-        mine = db.scalar(select(PathAssignment.id).where(PathAssignment.path_id == path.id, PathAssignment.student_id == profile.id)) if profile.role == "student" else None
+        mine = db.scalar(select(PathAssignment).where(PathAssignment.path_id == path.id, PathAssignment.student_id == profile.id)) if profile.role == "student" else None
         done = 0
         if mine:
             for course in visible:
@@ -779,13 +786,29 @@ def paths(profile: Profile = Depends(get_current_profile), db: Session = Depends
                 if not progress(db, prerequisite, prerequisite_lessons, prerequisite_activities)["completed"]:
                     prerequisites_met = False
                     break
-        result.append({"id": path.id, "title": path.title, "description": path.description, "objective": path.objective, "prerequisite_ids": json.loads(path.prerequisites_json), "prerequisites_met": prerequisites_met, "duration_hours": path.duration_hours, "published": path.published, "courses": [summary(db, course, profile) for course in visible], "assigned_student_ids": assigned, "assigned_to_me": bool(mine), "percent": round(100 * done / len(visible)) if mine and visible else 0})
+        result.append({"id": path.id, "title": path.title, "description": path.description, "objective": path.objective, "prerequisite_ids": json.loads(path.prerequisites_json), "prerequisites_met": prerequisites_met, "duration_hours": path.duration_hours, "published": path.published, "courses": [summary(db, course, profile) for course in visible], "assigned_student_ids": assigned, "assigned_to_me": bool(mine), "target_at": mine.target_at if mine else None, "percent": round(100 * done / len(visible)) if mine and visible else 0})
     return result
+
+
+def save_path_version(db: Session, path: LearningPath, profile: Profile):
+    course_ids = list(db.scalars(select(PathCourse.course_id).where(PathCourse.path_id == path.id).order_by(PathCourse.position)))
+    snapshot = {"title": path.title, "description": path.description, "objective": path.objective,
+                "prerequisite_ids": json.loads(path.prerequisites_json), "duration_hours": path.duration_hours,
+                "published": path.published, "course_ids": [str(item) for item in course_ids]}
+    version = (db.scalar(select(func.max(PathVersion.version)).where(PathVersion.path_id == path.id)) or 0) + 1
+    db.add(PathVersion(path_id=path.id, version=version, snapshot_json=json.dumps(snapshot, ensure_ascii=False), changed_by=profile.id))
+
+
+def valid_target_date(value: datetime | None):
+    if value and (value.tzinfo is None or value <= datetime.now(timezone.utc)):
+        raise HTTPException(422, "La fecha objetivo debe ser futura y tener zona horaria")
 
 
 @router.post("/paths", status_code=201)
 def create_path(data: PathInput, profile: Profile = Depends(get_current_profile), db: Session = Depends(get_db)):
     editor(profile)
+    if len(data.title.strip()) < 2:
+        raise HTTPException(422, "El nombre de la ruta es demasiado corto")
     if len(data.course_ids) != len(set(data.course_ids)) or len(data.prerequisite_ids) != len(set(data.prerequisite_ids)):
         raise HTTPException(422, "No repitas cursos en la ruta")
     for course_id in data.course_ids:
@@ -800,7 +823,61 @@ def create_path(data: PathInput, profile: Profile = Depends(get_current_profile)
     db.flush()
     for position, course_id in enumerate(data.course_ids, 1):
         db.add(PathCourse(path_id=path.id, course_id=course_id, position=position))
+    db.flush()
+    save_path_version(db, path, profile)
     record(db, profile, "path_created")
+    db.commit()
+    return {"id": path.id, "title": path.title}
+
+
+@router.get("/paths/{path_id}/versions")
+def path_versions(path_id: uuid.UUID, profile: Profile = Depends(get_current_profile), db: Session = Depends(get_db)):
+    editor(profile)
+    path = db.get(LearningPath, path_id)
+    if path is None or path.institution_id != institution(profile):
+        raise HTTPException(404, "Ruta no encontrada")
+    if profile.role == "teacher":
+        owned = list(db.scalars(select(Course).join(PathCourse, PathCourse.course_id == Course.id).where(PathCourse.path_id == path.id)))
+        if not owned or any(course.teacher_id != profile.id for course in owned):
+            raise HTTPException(404, "Ruta no encontrada")
+    return [{"version": row.version, "snapshot": json.loads(row.snapshot_json), "changed_at": row.changed_at} for row in db.scalars(select(PathVersion).where(PathVersion.path_id == path.id).order_by(PathVersion.version.desc()))]
+
+
+@router.patch("/paths/{path_id}")
+def update_path(path_id: uuid.UUID, data: PathInput, profile: Profile = Depends(get_current_profile), db: Session = Depends(get_db)):
+    editor(profile)
+    path = db.get(LearningPath, path_id)
+    if path is None or path.institution_id != institution(profile):
+        raise HTTPException(404, "Ruta no encontrada")
+    if len(data.title.strip()) < 2 or len(data.course_ids) != len(set(data.course_ids)) or len(data.prerequisite_ids) != len(set(data.prerequisite_ids)):
+        raise HTTPException(422, "Nombre o secuencia de cursos inválidos")
+    existing_courses = list(db.scalars(select(Course).join(PathCourse, PathCourse.course_id == Course.id).where(PathCourse.path_id == path.id).order_by(PathCourse.position)))
+    if profile.role == "teacher" and any(course.teacher_id != profile.id for course in existing_courses):
+        raise HTTPException(404, "Ruta no encontrada")
+    for course_id in data.course_ids + data.prerequisite_ids:
+        course = course_or_404(db, profile, course_id)
+        if profile.role == "teacher" and course.teacher_id != profile.id:
+            raise HTTPException(403, "Solo puedes usar tus cursos")
+        if path.published and not course.published:
+            raise HTTPException(409, "Una ruta publicada solo incluye cursos publicados")
+        if course_id in data.prerequisite_ids and not course.published:
+            raise HTTPException(409, "Publica los cursos prerrequisito antes de usarlos")
+    if path.published and not data.course_ids:
+        raise HTTPException(409, "Una ruta publicada necesita al menos un curso")
+    assigned = db.scalar(select(PathAssignment.id).where(PathAssignment.path_id == path.id).limit(1))
+    if assigned and data.course_ids != [course.id for course in existing_courses]:
+        raise HTTPException(409, "No cambies los cursos ni su orden en una ruta ya asignada")
+    path.title, path.description, path.objective = data.title.strip(), data.description.strip(), data.objective.strip()
+    path.prerequisites_json, path.duration_hours = json.dumps([str(item) for item in data.prerequisite_ids]), data.duration_hours
+    if not assigned:
+        for entry in db.scalars(select(PathCourse).where(PathCourse.path_id == path.id)):
+            db.delete(entry)
+        db.flush()
+        for position, course_id in enumerate(data.course_ids, 1):
+            db.add(PathCourse(path_id=path.id, course_id=course_id, position=position))
+        db.flush()
+    save_path_version(db, path, profile)
+    record(db, profile, "path_updated")
     db.commit()
     return {"id": path.id, "title": path.title}
 
@@ -815,13 +892,14 @@ def publish_path(path_id: uuid.UUID, profile: Profile = Depends(get_current_prof
     if not entries or any(not course.published or (profile.role == "teacher" and course.teacher_id != profile.id) for course in entries):
         raise HTTPException(409, "Publica los cursos de esta ruta antes de publicarla")
     path.published = True
+    save_path_version(db, path, profile)
     record(db, profile, "path_published")
     db.commit()
     return {"status": "published"}
 
 
 @router.post("/paths/{path_id}/assign-cohort")
-def assign_path_cohort(path_id: uuid.UUID, data: EnrollCohortInput, profile: Profile = Depends(get_current_profile), db: Session = Depends(get_db)):
+def assign_path_cohort(path_id: uuid.UUID, data: AssignPathCohortInput, profile: Profile = Depends(get_current_profile), db: Session = Depends(get_db)):
     if profile.role not in {"superadmin", "admin", "coordinator"}:
         raise HTTPException(403, "La institución asigna rutas a cohortes")
     path = db.get(LearningPath, path_id)
@@ -829,12 +907,13 @@ def assign_path_cohort(path_id: uuid.UUID, data: EnrollCohortInput, profile: Pro
         raise HTTPException(404, "Ruta no encontrada")
     if not path.published:
         raise HTTPException(409, "Publica la ruta antes de asignarla")
+    valid_target_date(data.target_at)
     cohort = cohort_or_404(db, profile, data.cohort_id)
     members = list(db.scalars(select(CohortMember.student_id).join(Profile, CohortMember.student_id == Profile.id).where(CohortMember.cohort_id == cohort.id, Profile.role == "student", Profile.institution_id == institution(profile))))
     existing = set(db.scalars(select(PathAssignment.student_id).where(PathAssignment.path_id == path.id)))
     for student_id in members:
         if student_id not in existing:
-            db.add(PathAssignment(path_id=path.id, student_id=student_id))
+            db.add(PathAssignment(path_id=path.id, student_id=student_id, target_at=data.target_at))
     inserted = len(set(members) - existing)
     if inserted:
         record(db, profile, "path_assigned")
@@ -943,6 +1022,7 @@ def assign_path(path_id: uuid.UUID, data: AssignPathInput, profile: Profile = De
         raise HTTPException(404, "Ruta no encontrada")
     if not path.published:
         raise HTTPException(409, "Publica la ruta antes de asignarla")
+    valid_target_date(data.target_at)
     if profile.role == "teacher":
         entries = list(db.scalars(select(Course).join(PathCourse, Course.id == PathCourse.course_id).where(PathCourse.path_id == path_id)))
         if not entries or any(course.teacher_id != profile.id for course in entries):
@@ -952,7 +1032,7 @@ def assign_path(path_id: uuid.UUID, data: AssignPathInput, profile: Profile = De
         raise HTTPException(404, "Estudiante no encontrado")
     if db.scalar(select(PathAssignment.id).where(PathAssignment.path_id == path_id, PathAssignment.student_id == student.id)):
         raise HTTPException(409, "La ruta ya está asignada")
-    db.add(PathAssignment(path_id=path_id, student_id=student.id))
+    db.add(PathAssignment(path_id=path_id, student_id=student.id, target_at=data.target_at))
     record(db, profile, "path_assigned")
     db.commit()
     return {"status": "assigned"}

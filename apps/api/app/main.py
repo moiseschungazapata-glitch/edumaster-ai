@@ -71,8 +71,10 @@ def readiness(db: Session = Depends(get_db)):
         supabase_url()
         database_url()
         db.execute(text("SELECT 1"))
+        db.execute(text("SELECT code FROM courses LIMIT 0"))
+        db.execute(text("SELECT id FROM path_versions LIMIT 0"))
     except (RuntimeError, SQLAlchemyError) as exc:
-        raise HTTPException(status_code=503, detail="Servicio no preparado") from exc
+        raise HTTPException(status_code=503, detail="Servicio o esquema académico no preparado") from exc
     return {"status": "ready"}
 
 

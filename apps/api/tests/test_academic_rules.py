@@ -5,7 +5,7 @@ import uuid
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
-from app.academic import ActivityInput, AnswerInput, CohortInput, CohortStudentInput, CourseInput, GradeInput, ImportCoursesInput, LessonInput, ResourceFileInput, UnitInput, add_activity, add_cohort_student, add_lesson, add_lesson_file, add_unit, course_student_progress, create_cohort, create_course, download_lesson_file, edit_lesson, export_courses, grade_submission, import_courses, lesson_versions, progress, publish, reissue_certificate, restore_lesson, submit_answer, verify_certificate
+from app.academic import ActivityInput, AnswerInput, CohortInput, CohortStudentInput, CourseInput, GradeInput, ImportCoursesInput, LessonInput, PathInput, ResourceFileInput, UnitInput, add_activity, add_cohort_student, add_lesson, add_lesson_file, add_unit, course_student_progress, create_cohort, create_course, create_path, download_lesson_file, edit_lesson, export_courses, grade_submission, import_courses, lesson_versions, path_versions, progress, publish, publish_path, reissue_certificate, restore_lesson, submit_answer, update_path, verify_certificate
 from app.certificate_pdf import render_certificate
 from app.core.models import Activity, Base, Certificate, CohortMember, Course, Enrollment, Institution, Lesson, LessonProgress, Profile
 
@@ -42,6 +42,11 @@ def test_academic_completion_and_cohort_rules():
         assert db.get(Lesson, lesson_id).unit_id == unit_id
         assert db.get(Activity, activity_id).options_json == '["Verdadero", "Falso"]'
         publish(course_id, teacher, db)
+        path_id = uuid.UUID(str(create_path(PathInput(title="Ruta inicial", course_ids=[course_id]), teacher, db)["id"]))
+        assert len(path_versions(path_id, teacher, db)) == 1
+        update_path(path_id, PathInput(title="Ruta revisada", objective="Completar curso", course_ids=[course_id]), teacher, db)
+        assert publish_path(path_id, teacher, db)["status"] == "published"
+        assert len(path_versions(path_id, teacher, db)) == 3
         enrollment = Enrollment(course_id=course_id, student_id=student.id)
         db.add(enrollment)
         db.flush()
