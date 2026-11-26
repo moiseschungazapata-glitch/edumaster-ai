@@ -26,3 +26,26 @@ def database_url() -> str:
 
 def allowed_origins() -> list[str]:
     return [origin.strip() for origin in os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",") if origin.strip()]
+
+
+def validate_production_settings() -> None:
+    """Reject missing or development settings before exposing a production API."""
+    if os.getenv("APP_ENV", "development") != "production":
+        return
+    from urllib.parse import parse_qs
+
+    url = supabase_url()
+    parsed_db = urlparse(database_url())
+    origins = allowed_origins()
+    if not url.startswith("https://"):
+        raise RuntimeError("SUPABASE_URL debe usar HTTPS en producción")
+    if not parsed_db.hostname or not parsed_db.username or not parsed_db.password:
+        raise RuntimeError("DATABASE_URL debe incluir host y credenciales en producción")
+    if parse_qs(parsed_db.query).get("sslmode") != ["require"]:
+        raise RuntimeError("DATABASE_URL debe usar sslmode=require en producción")
+    if not os.getenv("CORS_ORIGINS") or not origins or any(
+        not origin.startswith("https://") or "*" in origin or urlparse(origin).path not in {"", "/"}
+        or not urlparse(origin).hostname or urlparse(origin).hostname in {"localhost", "127.0.0.1"}
+        for origin in origins
+    ):
+        raise RuntimeError("CORS_ORIGINS debe incluir solo orígenes HTTPS públicos en producción")
