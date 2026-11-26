@@ -217,6 +217,63 @@ html[data-edumaster-theme='light'] body{background:#eaf3fd}.theme-light{color:#1
 .theme-light .academic-version-note { background: #eaf6fc; color: #547b95; }
 @media (max-width: 760px) { .academic-command-bar, .academic-command-bar--filters { align-items: stretch; flex-direction: column; }.academic-command-actions { justify-content: stretch; }.academic-command-actions button { flex: 1; }.academic-form-grid, .academic-selector-grid { grid-template-columns: 1fr; }.academic-selector-grid fieldset { max-height: 190px; }.academic-cohort-row { grid-template-columns: 1fr; align-items: stretch; }.academic-modal-backdrop { align-items: end; padding: 0; }.academic-modal { width: 100%; max-height: 92vh; border-radius: 16px 16px 0 0; }.academic-modal-header { padding: 20px 18px 15px; }.academic-modal-body { padding: 18px; }.academic-assignment-row, .academic-catalog-options > section, .academic-catalog-options > form, .academic-inline-form { grid-template-columns: 1fr; align-items: stretch; }.academic-catalog-options form button { justify-self: stretch; } }
 @media (prefers-reduced-motion: reduce) { .academic-modal-backdrop, .academic-modal { animation: none; } }
+
+/* Evaluations open as a focused workspace, separate from course administration. */
+.academic-modal { display: flex; flex-direction: column; }
+.academic-modal-header { flex: 0 0 auto; }
+.academic-modal-body { min-height: 0; max-height: none; overflow-y: auto; }
+.assessment-workspace { display: grid; gap: 20px; }
+.assessment-overview { display: flex; flex-wrap: wrap; align-items: center; gap: 28px; padding: 16px 18px; border: 1px solid #2b4258; border-radius: 10px; background: #091a2c; }
+.assessment-overview > div { display: grid; gap: 4px; }
+.assessment-overview strong { color: #edf5fc; font: 750 1.4rem/1.2 Manrope,sans-serif; }
+.assessment-overview > div > span { color: #96adbf; font-size: .8125rem; }
+.assessment-overview > .academic-status { margin-left: auto; }
+.assessment-view-nav { display: flex; gap: 6px; padding-bottom: 10px; border-bottom: 1px solid #2b4258; }
+.assessment-view-nav button { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 14px; border: 1px solid transparent; border-radius: 7px; background: transparent; color: #9eb5c7; font-family: inherit; font-size: .875rem; font-weight: 650; line-height: 1.3; cursor: pointer; }
+.assessment-view-nav button[aria-pressed=true] { background: #11364c; border-color: #2b6174; color: #76deea; }
+.assessment-view-nav button:hover { color: #edf6fc; background: #142e45; }
+.assessment-view-nav button > span { padding: 2px 6px; border-radius: 4px; background: #ffffff12; font-size: .75rem; }
+.assessment-list { display: grid; gap: 16px; }
+.academic-item.assessment-card { padding: 20px; border: 1px solid #30485d; border-radius: 10px; background: #0a1b2c; }
+.assessment-card-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.assessment-kind { color: #8cb9ce; font-size: .8125rem; font-weight: 650; }
+.assessment-passed { border-radius: 5px; padding: 4px 8px; background: #17664f50; color: #74dbb7; font-size: .8125rem; }
+.assessment-card h4 { margin: 10px 0; color: #e8f2fa; font: 700 1rem/1.45 Manrope,sans-serif; }
+.assessment-rules { display: flex; flex-wrap: wrap; gap: 8px 16px; padding-bottom: 14px; border-bottom: 1px solid #263e53; color: #8fa9bd; font-size: .8125rem; }
+.assessment-card p { margin: 16px 0; color: #c5d4df; font-size: 1rem; line-height: 1.65; overflow-wrap: anywhere; }
+.assessment-card fieldset { display: grid; gap: 8px; margin: 16px 0; border: 0; padding: 0; }
+.assessment-card fieldset legend { margin-bottom: 10px; font-size: .875rem; color: #9db4c5; }
+.academic-page .assessment-card fieldset label { padding: 12px; margin: 0; border: 1px solid #324c63; border-radius: 8px; background: #0c2237; color: #d5e4ee; font-size: .875rem; cursor: pointer; }
+.assessment-card fieldset label:has(input:checked) { border-color: #51bfce; background: #12384a; }
+.assessment-card input[type=radio] { accent-color: #62d8dd; }
+.assessment-card .outline-button { min-height: 40px; margin-top: 8px; }
+.assessment-empty { display: grid; justify-items: center; gap: 12px; min-height: 230px; align-content: center; padding: 28px 20px; text-align: center; border: 1px dashed #314b60; border-radius: 10px; background: #0a1b2b; }
+.assessment-empty-icon { display: grid; place-items: center; width: 44px; height: 44px; border: 1px solid #315b70; border-radius: 12px; color: #6bcfdb; background: #123044; font-size: 1.3rem; }
+.assessment-empty h3 { margin: 0; font: 700 1rem/1.5 Manrope,sans-serif; color: #d8e7f1; }
+.assessment-empty p { max-width: 400px; margin: 0; color: #91aabd; font-size: .9375rem; line-height: 1.6; }
+.assessment-loading { display: flex; align-items: center; justify-content: center; gap: 12px; min-height: 230px; color: #a3bacb; }
+.assessment-loading > span { width: 18px; height: 18px; border: 2px solid #315168; border-top-color: #66d3df; border-radius: 50%; animation: assessmentSpin .8s linear infinite; }
+.assessment-create-form { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 18px; }
+.assessment-create-form > h3, .assessment-create-form > label:has(textarea), .assessment-create-form > button { grid-column: 1 / -1; }
+.assessment-create-form > h3 { margin: 0 0 2px; font-size: 1rem; }
+.assessment-create-form > button { min-height: 40px; justify-self: end; }
+.assessment-review-card { padding: 18px; border: 1px solid #30485d; border-radius: 10px; margin: 16px 0; }
+.assessment-review-card h4 { margin: 0; overflow-wrap: anywhere; }
+.assessment-workspace .academic-message { font-size: .875rem; line-height: 1.6; }
+.assessment-workspace label { font-size: .875rem; }
+.theme-light .assessment-overview, .theme-light .assessment-card, .theme-light .assessment-empty { background: #f7fbfd; border-color: #ccdee9; }
+.theme-light .assessment-overview strong, .theme-light .assessment-card h4, .theme-light .assessment-empty h3 { color: #22445e; }
+.theme-light .assessment-card p { color: #385b75; }
+.theme-light .assessment-view-nav, .theme-light .assessment-rules, .theme-light .assessment-review-card { border-color: #ccdee9; }
+.theme-light .assessment-view-nav button { color: #52738c; }
+.theme-light .assessment-view-nav button[aria-pressed=true] { background: #e1f2f7; border-color: #a8d3df; color: #146580; }
+.theme-light .assessment-view-nav button:hover { background: #eaf3f8; color: #264f6a; }
+.theme-light .assessment-kind, .theme-light .assessment-rules, .theme-light .assessment-empty p, .theme-light .assessment-overview > div > span { color: #607f94; }
+.theme-light .academic-page .assessment-card fieldset label { background: #f1f8fc; border-color: #bcd4e4; color: #274b68; }
+.theme-light .assessment-card fieldset label:has(input:checked) { background: #e0f4f6; border-color: #40a2b5; }
+@keyframes assessmentSpin { to { transform: rotate(360deg); } }
+@media (max-width: 600px) { .assessment-overview { gap: 16px; padding: 14px; }.assessment-overview > .academic-status { margin-left: 0; }.assessment-view-nav { flex-wrap: wrap; }.assessment-view-nav button { flex: 1; padding: 10px; font-size: .8125rem; white-space: nowrap; }.academic-item.assessment-card { padding: 16px; }.assessment-create-form { grid-template-columns: 1fr; } }
+@media (prefers-reduced-motion: reduce) { .assessment-loading > span { animation: none; } }
 .live-dashboard { display: grid; gap: 20px; }
 .live-toolbar { padding: 22px; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 20px; }
 .live-toolbar h2 { margin: 8px 0; }
