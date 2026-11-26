@@ -39,7 +39,9 @@ def test_guidance_lifecycle_review_feedback_and_tenant_boundary():
     try:
         with TestClient(app) as client:
             status = client.get("/api/v1/guidance/model/status").json()
-            assert status["status"] == "demo_only" and status["prediction_enabled"] is False
+            assert status["status"] == "external_validation_only" and status["prediction_enabled"] is False
+            assert status["benchmark"]["examples"] == 17434
+            assert status["benchmark"]["metrics"]["risk_recall"] < .02
             assert client.post("/api/v1/guidance/model/predict").status_code == 503
             suggestion = client.post("/api/v1/guidance/recommendations/refresh").json()["recommendations"][0]
             assert suggestion["course_id"] == str(course_id)

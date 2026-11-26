@@ -1,9 +1,11 @@
 """Institution-scoped, teacher-reviewed academic guidance.
 
-This module never loads the synthetic phase-5 model or treats a suggestion as a grade.
+This module never loads an offline neural checkpoint or treats a suggestion as a grade.
 """
+import json
 import uuid
 from datetime import datetime, timedelta, timezone
+from importlib.resources import files
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -296,11 +298,13 @@ def guided_answer(data: TutorInput, profile: Profile = Depends(get_current_profi
 
 @router.get("/model/status")
 def model_status(profile: Profile = Depends(get_current_profile)):
-    return {"name": "EduMaster Multi-Task Network", "status": "demo_only",
-            "prediction_enabled": False, "source": "synthetic-demo",
-            "reason": "Faltan datos reales etiquetados y aprobación técnica y docente"}
+    benchmark = json.loads(files("app.ml").joinpath("benchmark.json").read_text(encoding="utf-8"))
+    return {"name": "EduMaster Multi-Task Network", "status": benchmark["status"],
+            "prediction_enabled": False, "source": benchmark["source"],
+            "reason": "El candidato externo no está validado con alumnos de EduMaster",
+            "benchmark": benchmark}
 
 
 @router.post("/model/predict")
 def predict(profile: Profile = Depends(get_current_profile)):
-    raise HTTPException(503, "La inferencia no está habilitada: el modelo disponible usa datos sintéticos")
+    raise HTTPException(503, "La inferencia no está habilitada: el candidato OULAD requiere validación local y aprobación docente")

@@ -77,4 +77,4 @@ También puedes ejecutar desde `apps/api` la comprobación de publicación, sust
 .\.venv\Scripts\python.exe -m scripts.smoke_release --api https://TU-API.vercel.app --web https://TU-WEB.vercel.app
 ```
 
-La comprobación es de solo lectura y no requiere contraseñas. Tras un despliegue público, revisa el uso de la función FastAPI: el canal SSE conserva una conexión abierta durante unos 45 segundos y luego el navegador se reconecta. El limitador de solicitudes de la API es por instancia; para muchos usuarios hace falta protección compartida o en el borde. Las secciones de IA predictiva y certificados siguen marcadas como DEMO y no se vuelven funcionales por publicarlas.
+La comprobación es de solo lectura y no requiere contraseñas. Tras un despliegue público, revisa el uso de la función FastAPI: el canal SSE conserva una conexión abierta durante unos 45 segundos y luego el navegador se reconecta. El limitador de solicitudes de la API es por instancia; para muchos usuarios hace falta protección compartida o en el borde. El benchmark OULAD se muestra como evaluación externa; publicarlo no habilita inferencia para estudiantes.

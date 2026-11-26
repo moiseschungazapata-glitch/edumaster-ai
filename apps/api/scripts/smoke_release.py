@@ -65,8 +65,10 @@ def run(api: str, web: str, token: str | None) -> None:
         print("Sesión autenticada: OK")
         status, model = request(f"{api}/api/v1/guidance/model/status", token)
         if status != 200 or not isinstance(model, dict) or model.get("prediction_enabled") is not False:
-            raise RuntimeError("Estado del modelo no coincide con la versión demo prevista")
-        print("Modelo demo sin inferencia: OK")
+            raise RuntimeError("La inferencia del modelo debe permanecer deshabilitada")
+        if model.get("status") != "external_validation_only" or not model.get("benchmark"):
+            raise RuntimeError("No se publicó el estado del benchmark OULAD")
+        print("Benchmark OULAD visible; inferencia deshabilitada: OK")
 
 
 def main() -> int:

@@ -19,6 +19,9 @@ ml = ["torch>=2.5,<3", "scikit-learn>=1.5,<2", "mlflow>=2.15,<4"]
 [tool.setuptools.packages.find]
 include = ["app*"]
 
+[tool.setuptools.package-data]
+"app.ml" = ["benchmark.json"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 

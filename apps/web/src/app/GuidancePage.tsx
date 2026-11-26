@@ -80,7 +80,7 @@ export default function GuidancePage({ section, profile, onNavigate }: {
     <section className="panel academic-panel">
       <span className="panel-eyebrow">ORIENTACIÓN ACADÉMICA · {student ? 'ESTUDIANTE' : 'REVISIÓN DOCENTE'}</span>
       <h2>{section === 'tutor' ? 'Guía de aprendizaje' : student ? 'Tus sugerencias' : 'Sugerencias para revisar'}</h2>
-      <p>Fuente: reglas académicas y progreso guardado. El modelo neuronal DEMO no emite predicciones ni calificaciones.</p>
+      <p>Fuente: reglas académicas y progreso guardado. El candidato neuronal OULAD se evaluó offline y no emite predicciones ni calificaciones para estudiantes de EduMaster.</p>
       {student && section === 'recommendations' && <button className="primary-button" disabled={busy}
         onClick={() => void run(() => request('/recommendations/refresh', 'POST'))}>Buscar sugerencias</button>}
       {section === 'tutor' && student && <form className="guidance-question" onSubmit={ask}>

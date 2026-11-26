@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
-import { isConfigured, loadProfile, supabase } from './auth';
+import { apiBaseUrl, isConfigured, loadProfile, supabase } from './auth';
 import AcademicPage from './AcademicPage';
 import CertificatesPage from './CertificatesPage';
 import CertificateVerification from './CertificateVerification';
@@ -103,7 +103,7 @@ function Panel({ title, eyebrow, action, children, className = '' }: { title: st
 }
 function TinyArrow() { return <span className="tiny-arrow"><Icon name="arrow" size={15}/></span>; }
 
-function NeuralNetwork({ running, compact = false }: { running: boolean; compact?: boolean }) {
+function NeuralNetwork({ running, compact = false, modelFlow = false }: { running: boolean; compact?: boolean; modelFlow?: boolean }) {
   const columns = [3, 5, 5, 3];
   const xs = [48, 155, 262, 369];
   const yFor = (count: number, index: number) => 122 + (index - (count - 1) / 2) * (compact ? 34 : 39);
@@ -114,7 +114,7 @@ function NeuralNetwork({ running, compact = false }: { running: boolean; compact
       {columns.slice(0, -1).flatMap((count, col) => Array.from({ length: count }, (_, i) => columns[col + 1] ? Array.from({ length: columns[col + 1] }, (_, j) => <line key={`${col}-${i}-${j}`} className="neural-link" x1={xs[col]} y1={yFor(count, i)} x2={xs[col + 1]} y2={yFor(columns[col + 1], j)} style={{ animationDelay: `${(col * 5 + i + j) * 75}ms` }} />) : []))}
       {columns.flatMap((count, col) => Array.from({ length: count }, (_, i) => <g key={`${col}-${i}`}><circle className="neural-halo" cx={xs[col]} cy={yFor(count, i)} r="14"/><circle className={`neural-node neural-node--${col}`} cx={xs[col]} cy={yFor(count, i)} r="5.5" style={{ animationDelay: `${(col * 4 + i) * 90}ms` }}/></g>))}
     </svg>
-    <div className="neural-labels"><span>Entrada<small>3 variables</small></span><span>Capa oculta<small>5 neuronas</small></span><span>Capa oculta<small>5 neuronas</small></span><span>Salida<small>3 objetivos</small></span></div>
+    <div className="neural-labels">{modelFlow ? <><span>Entrada<small>6 semanas · 4 señales</small></span><span>GRU<small>16 unidades</small></span><span>Fusión<small>24 unidades</small></span><span>Salida<small>4 objetivos</small></span></> : <><span>Entrada<small>3 variables</small></span><span>Capa oculta<small>5 neuronas</small></span><span>Capa oculta<small>5 neuronas</small></span><span>Salida<small>3 objetivos</small></span></>}</div>
     <div className="scene-corner scene-corner--tl"/><div className="scene-corner scene-corner--br"/>
   </div>;
 }
@@ -178,7 +178,70 @@ function SkillRows({compact=false}:{compact?:boolean}) { return <div className={
 function CourseCards({ search }: { search: string }) { const filtered = courses.filter(c => `${c.name} ${c.category}`.toLowerCase().includes(search.toLowerCase()));return filtered.length ? <div className="cards-grid">{filtered.map(c=><article className="course-card" key={c.id}><div className={`course-card-art art-${c.color}`}><span className="art-decoration">{c.symbol}</span><span className="art-chip">{c.initials}</span></div><div className="course-card-body"><span className="mini-overline">{c.category}</span><h3>{c.name}</h3><div className="course-meta"><span><Icon name="users" size={15}/>{c.people} estudiantes</span><span><Icon name="clock" size={15}/>{c.duration}</span></div><div className="course-card-bottom"><span>Progreso <strong>{c.progress}%</strong></span><div className="progress-track"><span style={{width:`${c.progress}%`}}/></div></div></div></article>)}</div> : <div className="empty-state"><Icon name="search" size={28}/><h3>No encontramos cursos</h3><p>Prueba con otro término de búsqueda.</p></div>; }
 function OverviewTiles({ items }: { items: {icon:IconName; value:string; label:string; tone:string}[] }) {return <div className="mini-kpi-grid">{items.map(x=><div className="mini-kpi" key={x.label}><span className={`mini-kpi-icon tone-${x.tone}`}><Icon name={x.icon} size={20}/></span><strong>{x.value}</strong><small>{x.label}</small></div>)}</div>;}
 
-function SecondaryPage({ section, onNavigate, running, onToggle }: { section: string; onNavigate: (id:string)=>void; running:boolean; onToggle:()=>void }) {
+type NeuralStatus = {
+  status: string;
+  prediction_enabled: boolean;
+  reason: string;
+  benchmark: {
+    dataset: string;
+    dataset_url: string;
+    model_version: string;
+    examples: number;
+    split: { train: number; validation: number; test: number };
+    architecture: { steps: number; features: number; gru_units: number; fusion_units: number; outputs: number };
+    metrics: { completion_roc_auc: number; completion_brier: number; completion_baseline_brier: number; risk_recall: number };
+  };
+};
+
+function NeuralPage() {
+  const [model, setModel] = useState<NeuralStatus | null>(null);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    const controller = new AbortController();
+    let active = true;
+    void (async () => {
+      try {
+        const session = (await supabase?.auth.getSession())?.data.session;
+        if (!session) throw new Error('Inicia sesión para consultar el estado del modelo.');
+        const response = await fetch(`${apiBaseUrl}/api/v1/guidance/model/status`, {
+          headers: { Authorization: `Bearer ${session.access_token}` }, signal: controller.signal,
+        });
+        if (!response.ok) throw new Error('No se pudo consultar el estado del modelo.');
+        const result = await response.json() as NeuralStatus;
+        if (!result.benchmark || result.status !== 'external_validation_only') throw new Error('La API aún no publica la evaluación OULAD.');
+        if (active) setModel(result);
+      } catch (cause) {
+        if (active && !controller.signal.aborted) setError(cause instanceof Error ? cause.message : 'No se pudo consultar el modelo.');
+      }
+    })();
+    return () => { active = false; controller.abort(); };
+  }, []);
+  const benchmark = model?.benchmark;
+  const metrics = benchmark?.metrics;
+  return <div className="neural-page">
+    <section className="page-intro-card neural-intro">
+      <div><span className="intro-serial">EDUMASTER.AI / INVESTIGACIÓN APLICADA</span><h2>Modelo neuronal OULAD</h2><p>Candidato entrenado y evaluado con datos académicos públicos de la Open University.</p><span className="neural-source-tag">DATOS PÚBLICOS · OULAD</span></div>
+      <div className="intro-watermark"><Icon name="network" size={90}/></div>
+    </section>
+    {error && <div className="info-callout" role="alert"><Icon name="shield" size={22}/><p>{error} La predicción para estudiantes permanece deshabilitada.</p></div>}
+    {!error && !model && <div className="panel neural-loading" role="status">Consultando la evaluación del modelo…</div>}
+    {benchmark && metrics && <>
+      <div className="neural-evidence-grid">
+        <div className="mini-kpi"><span className="mini-kpi-icon tone-cyan"><Icon name="users" size={20}/></span><strong>{new Intl.NumberFormat('es-CO').format(benchmark.examples)}</strong><small>Registros del benchmark</small></div>
+        <div className="mini-kpi"><span className="mini-kpi-icon tone-violet"><Icon name="chart" size={20}/></span><strong>{metrics.completion_roc_auc.toFixed(3)}</strong><small>ROC-AUC · finalización</small></div>
+        <div className="mini-kpi"><span className="mini-kpi-icon tone-orange"><Icon name="shield" size={20}/></span><strong>{(metrics.risk_recall * 100).toFixed(1)} %</strong><small>Recall · riesgo de retiro</small></div>
+      </div>
+      <div className="neural-full panel"><div className="panel-head"><div><span className="panel-eyebrow">ARQUITECTURA ENTRENADA</span><h2>GRU · fusión · cuatro salidas</h2></div><span className="neural-source-tag">CANDIDATO OFFLINE</span></div><NeuralNetwork running modelFlow/><p className="neural-diagram-note">Esquema conceptual del flujo. Los nodos dibujados no corresponden uno a uno a los parámetros entrenados.</p></div>
+      <div className="neural-detail-grid">
+        <section className="panel neural-detail"><span className="panel-eyebrow">CONFIGURACIÓN</span><h3>Modelo multitarea</h3><p>{benchmark.architecture.steps} semanas × {benchmark.architecture.features} señales · GRU de {benchmark.architecture.gru_units} unidades · fusión de {benchmark.architecture.fusion_units} · {benchmark.architecture.outputs} salidas.</p><p className="neural-version">Versión {benchmark.model_version.slice(0, 12)}</p></section>
+        <section className="panel neural-detail"><span className="panel-eyebrow">EVALUACIÓN TEMPORAL</span><h3>Cohortes separadas</h3><p>{new Intl.NumberFormat('es-CO').format(benchmark.split.train)} entrenamiento · {new Intl.NumberFormat('es-CO').format(benchmark.split.validation)} validación · {new Intl.NumberFormat('es-CO').format(benchmark.split.test)} prueba.</p><a href={benchmark.dataset_url} target="_blank" rel="noreferrer">Fuente del dataset OULAD <Icon name="external" size={14}/></a></section>
+      </div>
+      <div className="info-callout neural-validation"><Icon name="shield" size={22}/><p><strong>Validación para EduMaster pendiente.</strong> La calibración de finalización fue {metrics.completion_brier.toFixed(3)} frente a {metrics.completion_baseline_brier.toFixed(3)} del baseline y el recall de riesgo fue {(metrics.risk_recall * 100).toFixed(1)} %. Este candidato se evaluó offline con otra institución. No realiza predicciones ni entrena en esta pantalla.</p></div>
+    </>}
+  </div>;
+}
+
+function SecondaryPage({ section, onNavigate }: { section: string; onNavigate: (id:string)=>void }) {
   const [search, setSearch] = useState('');
   const [notice, setNotice] = useState('');
   const demoAction = (message:string) => { setNotice(message); window.setTimeout(()=>setNotice(''),4200); };
@@ -191,7 +254,6 @@ function SecondaryPage({ section, onNavigate, running, onToggle }: { section: st
     {section==='paths' && <><OverviewTiles items={[{icon:'route',value:'12',label:'Rutas diseñadas',tone:'cyan'},{icon:'users',value:'1,486',label:'Estudiantes inscritos',tone:'violet'},{icon:'target',value:'68%',label:'Avance promedio',tone:'teal'}]}/><div className="cards-grid">{[{title:'Ruta de Ciencia de Datos',sub:'4 cursos · Nivel intermedio',pct:68,color:'cyan'},{title:'Experiencia Digital',sub:'3 cursos · Nivel inicial',pct:82,color:'violet'},{title:'Fundamentos de IA',sub:'5 cursos · Nivel avanzado',pct:46,color:'teal'}].map((p,i)=><article className="path-card" key={p.title}><div className={`path-icon tone-${p.color}`}><Icon name="route" size={22}/></div><span className="path-index">RUTA / 0{i+1}</span><h3>{p.title}</h3><p>{p.sub}</p><div className="path-progress"><span>Progreso de la ruta</span><strong>{p.pct}%</strong></div><div className="progress-track"><span style={{width:`${p.pct}%`}}/></div><button className="text-link" onClick={()=>onDemo('Detalle de ruta')}>Explorar ruta <Icon name="arrow" size={15}/></button></article>)}</div></>}
     {section==='analytics' && <><OverviewTiles items={[{icon:'activity',value:'76.4%',label:'Participación',tone:'cyan'},{icon:'target',value:'72%',label:'Finalización',tone:'teal'},{icon:'chart',value:'18.4k',label:'Horas acumuladas',tone:'violet'}]}/><div className="dashboard-main-grid"><Panel title="Progreso de aprendizaje" eyebrow="TENDENCIAS · DEMO" action={<Demo compact/>}><div className="legend-row"><span><i className="dot blue"/> Participación</span><span><i className="dot violet"/> Finalización</span></div><TrendChart period="30 días"/></Panel><Panel title="Estado de finalización" eyebrow="MATRÍCULAS · DEMO"><CompletionDonut/></Panel></div><Panel title="Lectura responsable de datos" eyebrow="TRANSPARENCIA"><div className="info-callout"><Icon name="shield" size={22}/><p>Los valores de esta pantalla son ilustrativos. La versión conectada mostrará institución, periodo, origen y fecha de actualización de cada indicador.</p></div></Panel></>}
     {section==='skills' && <div className="dashboard-main-grid"><Panel title="Mapa de competencias" eyebrow="DOMINIO ESTIMADO · DEMO"><SkillRows/></Panel><Panel title="Niveles de dominio" eyebrow="REFERENCIA VISUAL"><div className="level-list">{['Principiante','Elemental','Intermedio','Avanzado','Experto'].map((x,i)=><div key={x}><span className={`level-bar level-${i}`}/><span>{x}</span><strong>0{i+1}</strong></div>)}</div><p className="muted-note">El dominio estimado por IA y el validado por un docente son resultados distintos.</p></Panel></div>}
-    {section==='neural' && <><div className="neural-full panel"><div className="panel-head"><div><span className="panel-eyebrow">VISUALIZACIÓN INTERACTIVA</span><h2>Flujo de la red neuronal</h2></div><Demo compact/></div><NeuralNetwork running={running}/></div><div className="mini-kpi-grid"><div className="mini-kpi"><span className="mini-kpi-icon tone-cyan"><Icon name="layers"/></span><strong>04</strong><small>Capas ilustrativas</small></div><div className="mini-kpi"><span className="mini-kpi-icon tone-violet"><Icon name="network"/></span><strong>16</strong><small>Nodos visualizados</small></div><div className="mini-kpi"><span className="mini-kpi-icon tone-teal"><Icon name="shield"/></span><strong>DEMO</strong><small>Sin modelo conectado</small></div></div><div className="info-callout"><Icon name="shield" size={22}/><p>Esta animación es una demostración de interfaz. Cuando exista un modelo entrenado, la topología, las métricas y los estados se recibirán del backend. No representa un entrenamiento activo.</p></div></>}
     {section==='tutor' && <div className="tutor-layout"><div className="panel tutor-chat"><div className="panel-head"><div><span className="panel-eyebrow">ACOMPAÑAMIENTO PERSONALIZADO</span><h2>Conversación de muestra</h2></div><Demo compact/></div><div className="chat-thread"><div className="chat-bubble bot"><div className="bubble-avatar"><Icon name="spark" size={18}/></div><div><small>EDUMASTER IA</small><p>¡Hola! Soy tu guía de aprendizaje. Puedo ayudarte a explorar rutas y detectar temas que conviene reforzar.</p></div></div><div className="chat-bubble human"><p>¿Qué puedo estudiar después de Fundamentos de IA?</p></div><div className="chat-bubble bot"><div className="bubble-avatar"><Icon name="spark" size={18}/></div><div><small>SUGERENCIA DE EJEMPLO</small><p>Podrías continuar con <strong>Redes neuronales aplicadas</strong>. Refuerza conceptos de modelos y evaluación; un docente podrá revisar la recomendación.</p></div></div></div><div className="chat-input"><input placeholder="La conversación se habilitará al conectar la API" disabled aria-label="Entrada del tutor no disponible"/><button onClick={()=>onDemo('Enviar mensaje')} disabled><Icon name="arrow" size={17}/></button></div></div><Panel title="Tu próximo paso" eyebrow="PROPUESTA · DEMO"><div className="suggestion-large"><span><Icon name="spark" size={28}/></span><h3>Aprende a tu ritmo</h3><p>Las recomendaciones reales incluirán su motivo, evidencia y versión del modelo utilizado.</p><button className="text-link" onClick={()=>onNavigate('recommendations')}>Ver recomendaciones <Icon name="arrow" size={15}/></button></div></Panel></div>}
     {section==='recommendations' && <><OverviewTiles items={[{icon:'spark',value:'08',label:'Sugerencias nuevas',tone:'violet'},{icon:'check',value:'14',label:'Aceptadas',tone:'teal'},{icon:'target',value:'76%',label:'Utilidad de ejemplo',tone:'cyan'}]}/><div className="recommendation-list">{[{title:'Profundiza en análisis de datos',why:'Relacionada con la ruta Ciencia de Datos',tone:'cyan',tag:'RECURSO'},{title:'Practica fundamentos de redes neuronales',why:'Refuerzo sugerido después del módulo de IA',tone:'violet',tag:'ACTIVIDAD'},{title:'Explora visualización de información',why:'Complementa tu progreso en diseño digital',tone:'teal',tag:'RUTA'}].map(r=><div className="recommendation-card" key={r.title}><span className={`reco-icon tone-${r.tone}`}><Icon name="spark" size={22}/></span><div><small>{r.tag} · DEMO</small><h3>{r.title}</h3><p>{r.why}</p></div><div className="reco-actions"><button className="outline-button" onClick={()=>onDemo('Descartar recomendación')}>Descartar</button><button className="primary-button" onClick={()=>onDemo('Aceptar recomendación')}>Explorar <Icon name="arrow" size={15}/></button></div></div>)}</div></>}
     {section==='assessments' && <><OverviewTiles items={[{icon:'check',value:'24',label:'Evaluaciones',tone:'teal'},{icon:'clock',value:'08',label:'En progreso',tone:'cyan'},{icon:'target',value:'81%',label:'Resultado promedio',tone:'violet'}]}/><Panel title="Evaluaciones recientes" eyebrow="EJEMPLOS DE INTERFAZ" action={<button className="primary-button" onClick={()=>onDemo('Crear evaluación')}>+ Nueva evaluación</button>}><div className="table-wrap"><table><thead><tr><th>Evaluación</th><th>Curso</th><th>Tipo</th><th>Estado</th><th>Intentos</th></tr></thead><tbody>{[['Introducción a modelos','Fundamentos de IA','Cuestionario','Publicada','184'],['Exploración de datos','Análisis con Python','Práctica','En revisión','92'],['Principios visuales','Diseño digital','Actividad','Borrador','—'],['Capas y activaciones','Redes neuronales','Cuestionario','Publicada','74']].map(r=><tr key={r[0]}>{r.map((cell,i)=><td key={i}>{i===3?<span className={`status-pill ${cell==='Publicada'?'good':cell==='Borrador'?'quiet':'pending'}`}>{cell}</span>:cell}</td>)}</tr>)}</tbody></table></div></Panel></>}
@@ -279,7 +341,6 @@ export default function App() {
     try { return localStorage.getItem('edumaster-theme') === 'light' ? 'light' : 'dark'; }
     catch { return 'dark'; }
   });
-  const [running, setRunning] = useState(true);
   const [period, setPeriod] = useState('30 días');
   const [globalSearch, setGlobalSearch] = useState('');
   const [notificationOpen, setNotificationOpen] = useState(false);
@@ -365,7 +426,7 @@ export default function App() {
       <button className="header-icon theme-toggle" onClick={()=>setTheme(current=>current==='dark'?'light':'dark')} aria-label={theme==='dark'?'Activar modo claro':'Activar modo oscuro'} aria-pressed={theme==='light'} title={theme==='dark'?'Cambiar a modo claro':'Cambiar a modo oscuro'}><Icon name={theme==='dark'?'sun':'moon'} size={19}/></button>
       <div className="popover-anchor"><button className="header-icon" aria-label="Notificaciones" onClick={()=>{setNotificationOpen(!notificationOpen);setProfileOpen(false)}}><Icon name="bell" size={19}/><i/></button>{notificationOpen&&<div className="header-popover"><strong>Notificaciones académicas</strong>{dashboardState.data?.recent_events.length ? dashboardState.data.recent_events.slice(0,4).map(event=><p key={event.id}>{event.title} · {new Intl.DateTimeFormat('es-PE',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',timeZone:'America/Lima'}).format(new Date(event.occurred_at))}</p>) : <p>No hay actividad nueva en este periodo.</p>}<button onClick={()=>navigate('activity')}>Ir a actividad <Icon name="arrow" size={14}/></button></div>}</div>
       <div className="popover-anchor"><button className="top-avatar" aria-label="Abrir perfil" aria-expanded={profileOpen} onClick={()=>{setProfileOpen(!profileOpen);setNotificationOpen(false)}}>EM</button>{profileOpen&&<div className="header-popover profile-popover"><strong>{profile.email}</strong><p>Rol: {profile.role}</p><span>Acceso verificado por Supabase y la API.</span><div className="profile-popover-divider"/><button className="logout-button" onClick={()=>void logout()}><Icon name="logout" size={16}/> Cerrar sesión <Icon name="arrow" size={15}/></button></div>}</div></div></header>
-      <main className="content"><div className="page-heading"><div><span className="page-eyebrow"><span/> {page.eyebrow}</span><h1>{page.title}<span className="heading-period">.</span></h1><p>{page.desc}</p></div><div className="heading-actions">{!['dashboard','analytics','activity','courses','paths','assessments','certificates'].includes(section) && <Demo/>}<div className="date-pill"><Icon name="calendar" size={16}/>{date}</div></div></div>{section==='dashboard'?<LiveDashboard state={dashboardState} onNavigate={navigate}/>:section==='analytics'?<AnalyticsPage/>:section==='recommendations'||section==='tutor'?<GuidancePage key={section} section={section} profile={profile} onNavigate={navigate}/>:section==='activity'?<LiveActivity state={dashboardState}/>:section==='courses'||section==='paths'||section==='assessments'?<AcademicPage key={section} section={section} profile={profile}/>:section==='certificates'?<CertificatesPage profile={profile}/>:<SecondaryPage key={section} section={section} onNavigate={navigate} running={running} onToggle={()=>setRunning(!running)}/>}<footer className="footer"><span>© {new Date().getFullYear()} EduMaster.ai · Aprende · Practica · Destaca</span><span>Datos académicos desde la API · Inteligencia artificial ilustrativa</span></footer></main>
+      <main className="content"><div className="page-heading"><div><span className="page-eyebrow"><span/> {page.eyebrow}</span><h1>{page.title}<span className="heading-period">.</span></h1><p>{page.desc}</p></div><div className="heading-actions">{!['dashboard','analytics','activity','courses','paths','assessments','certificates','neural'].includes(section) && <Demo/>}<div className="date-pill"><Icon name="calendar" size={16}/>{date}</div></div></div>{section==='dashboard'?<LiveDashboard state={dashboardState} onNavigate={navigate}/>:section==='analytics'?<AnalyticsPage/>:section==='recommendations'||section==='tutor'?<GuidancePage key={section} section={section} profile={profile} onNavigate={navigate}/>:section==='activity'?<LiveActivity state={dashboardState}/>:section==='courses'||section==='paths'||section==='assessments'?<AcademicPage key={section} section={section} profile={profile}/>:section==='certificates'?<CertificatesPage profile={profile}/>:section==='neural'?<NeuralPage/>:<SecondaryPage key={section} section={section} onNavigate={navigate}/>}<footer className="footer"><span>© {new Date().getFullYear()} EduMaster.ai · Aprende · Practica · Destaca</span><span>{section==='neural'?'Benchmark OULAD público · inferencia para alumnos deshabilitada':'Datos académicos desde la API · Inteligencia artificial ilustrativa'}</span></footer></main>
     </div>
   </div>;
 }

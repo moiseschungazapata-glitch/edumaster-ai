@@ -31,7 +31,7 @@ Estado: **en progreso**. Esta guía registra evidencia local y verificaciones pe
 4. Ejecutar pruebas E2E de login, recarga de sesión, creación de curso, matrícula, evaluación, panel y ciclo completo de recomendación con datos de prueba. No usar estudiantes reales sin autorización.
 5. Medir p50/p95 y errores de inicio de sesión, panel, cursos y recomendaciones bajo carga progresiva en staging. Definir metas con el equipo, conservar trazas y verificar que no se degrade PostgreSQL/Supabase. Simular desconexión y recuperación.
 6. Preparar backup de staging; restaurarlo en una base aislada, ejecutar `alembic current`, verificar cantidad de registros y ensayar rollback de aplicación. No ejecutar `alembic downgrade` sobre la base productiva sin plan de pérdida de datos.
-7. Registrar UAT con responsables, fecha, defectos y evidencia. Confirmar que fases 5 y 6 tienen datos reales autorizados, validación del modelo y aprobación humana antes de aceptar la parte predictiva. Actualmente el modelo es `demo_only` y la predicción responde 503: impide declarar el producto completo como release candidate con IA real.
+7. Registrar UAT con responsables, fecha, defectos y evidencia. Confirmar que fases 5 y 6 tienen datos propios autorizados, validación local del modelo y aprobación humana antes de aceptar la parte predictiva. Actualmente existe un benchmark externo OULAD (`external_validation_only`) y la predicción responde 503: impide declarar el producto completo como release candidate con IA predictiva para EduMaster.
 
 ## Recuperación y operación
 

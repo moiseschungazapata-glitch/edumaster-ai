@@ -1,0 +1,20 @@
+{
+  "source": "public-oulad-benchmark",
+  "status": "external_validation_only",
+  "dataset": "Open University Learning Analytics Dataset (OULAD)",
+  "dataset_url": "https://archive.ics.uci.edu/dataset/349/open+university+learning+analytics+dataset",
+  "license": "CC BY 4.0",
+  "data_version": "c9cf49e72ea09849d0941f7e8976d2416f6746d1c354eda9081df628df3d5ce5",
+  "model_version": "4417a57652b1038ca6fe09ad29ff3ac991002f07d6004993e05235852c6c287f",
+  "examples": 17434,
+  "split": {"train": 3621, "validation": 6601, "test": 7212},
+  "architecture": {"steps": 6, "features": 4, "gru_units": 16, "fusion_units": 24, "outputs": 4},
+  "metrics": {
+    "completion_roc_auc": 0.649074235038037,
+    "completion_brier": 0.24863122427845571,
+    "completion_baseline_brier": 0.22953475645247512,
+    "risk_recall": 0.01826923076923077,
+    "risk_pr_auc": 0.17372314053564963,
+    "mastery_macro_f1": 0.36105216635610343
+  }
+}
