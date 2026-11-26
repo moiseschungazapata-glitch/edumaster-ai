@@ -2,12 +2,76 @@
 import base64
 import uuid
 
+import pytest
+from fastapi import HTTPException
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
-from app.academic import ActivityInput, AnswerInput, CohortInput, CohortStudentInput, CourseInput, GradeInput, ImportCoursesInput, LessonInput, PathInput, ResourceFileInput, UnitInput, add_activity, add_cohort_student, add_lesson, add_lesson_file, add_unit, course_student_progress, create_cohort, create_course, create_path, download_lesson_file, edit_lesson, export_courses, grade_submission, import_courses, lesson_versions, path_versions, progress, publish, publish_path, reissue_certificate, restore_lesson, submit_answer, update_path, verify_certificate
+from app.academic import ActivityInput, AnswerInput, CohortInput, CohortStudentInput, CourseInput, GradeInput, ImportCoursesInput, LessonInput, PathInput, ResourceFileInput, UnitInput, add_activity, add_cohort_student, add_lesson, add_lesson_file, add_unit, course_detail, course_student_progress, create_cohort, create_course, create_path, download_lesson_file, edit_lesson, export_courses, grade_submission, import_courses, lesson_versions, path_versions, progress, publish, publish_path, reissue_certificate, restore_lesson, submit_answer, update_path, verify_certificate
 from app.certificate_pdf import render_certificate
 from app.core.models import Activity, Base, Certificate, CohortMember, Course, Enrollment, Institution, Lesson, LessonProgress, Profile
+from app.lesson_revisions import CONCISE_CONTENT, COURSE_TITLE, LEAKED_EXAMPLE, LESSON_TITLE
+
+
+def test_published_lesson_correction_keeps_student_progress():
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    with Session(engine) as db:
+        institution_id = uuid.uuid4()
+        teacher = Profile(id=uuid.uuid4(), institution_id=institution_id, role="teacher", email="teacher@school.test")
+        student = Profile(id=uuid.uuid4(), institution_id=institution_id, role="student", email="student@school.test")
+        db.add_all([Institution(id=institution_id, name="Escuela"), teacher, student])
+        db.commit()
+        course_id = uuid.UUID(str(create_course(CourseInput(title="Análisis de datos"), teacher, db)["id"]))
+        lesson_id = uuid.UUID(str(add_lesson(course_id, LessonInput(title="Indicadores", content="Versión extensa"), teacher, db)["id"]))
+        publish(course_id, teacher, db)
+        enrollment = Enrollment(course_id=course_id, student_id=student.id)
+        db.add(enrollment)
+        db.flush()
+        db.add(LessonProgress(enrollment_id=enrollment.id, lesson_id=lesson_id))
+        db.commit()
+
+        edit_lesson(course_id, lesson_id, LessonInput(title="Indicadores", content="Versión breve"), teacher, db)
+        assert db.get(Course, course_id).published
+        assert db.get(Lesson, lesson_id).content == "Versión breve"
+        assert len(lesson_versions(course_id, lesson_id, teacher, db)) == 2
+        assert progress(db, enrollment, [db.get(Lesson, lesson_id)], [])["percent"] == 100
+        edit_lesson(course_id, lesson_id, LessonInput(title="Indicadores", content="Versión breve"), teacher, db)
+        assert len(lesson_versions(course_id, lesson_id, teacher, db)) == 2
+        with pytest.raises(HTTPException) as blocked:
+            edit_lesson(course_id, lesson_id, LessonInput(title="Indicadores", content="Otro", unit_id=uuid.uuid4()), teacher, db)
+        assert blocked.value.status_code == 409
+    engine.dispose()
+
+
+def test_old_published_lesson_hides_quiz_example_until_version_is_saved():
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    with Session(engine) as db:
+        institution_id = uuid.uuid4()
+        teacher = Profile(id=uuid.uuid4(), institution_id=institution_id, role="teacher", email="teacher@school.test")
+        student = Profile(id=uuid.uuid4(), institution_id=institution_id, role="student", email="student@school.test")
+        db.add_all([Institution(id=institution_id, name="Escuela"), teacher, student])
+        db.commit()
+        course_id = uuid.UUID(str(create_course(CourseInput(title=COURSE_TITLE), teacher, db)["id"]))
+        old_content = f"Introducción larga. {LEAKED_EXAMPLE}, la conversión es 20 %."
+        lesson_id = uuid.UUID(str(add_lesson(course_id, LessonInput(title=LESSON_TITLE, content=old_content), teacher, db)["id"]))
+        publish(course_id, teacher, db)
+        db.add(Enrollment(course_id=course_id, student_id=student.id))
+        db.commit()
+
+        visible = course_detail(course_id, student, db)["lessons"][0]
+        assert visible["content"] == CONCISE_CONTENT
+        assert visible["suggested_content"] is None
+        assert LEAKED_EXAMPLE not in visible["content"]
+        editorial = course_detail(course_id, teacher, db)["lessons"][0]
+        assert editorial["content"] == old_content
+        assert editorial["suggested_content"] == CONCISE_CONTENT
+        edit_lesson(course_id, lesson_id, LessonInput(title=LESSON_TITLE, content=CONCISE_CONTENT), teacher, db)
+        assert course_detail(course_id, student, db)["lessons"][0]["content"] == CONCISE_CONTENT
+        assert course_detail(course_id, teacher, db)["lessons"][0]["suggested_content"] is None
+        assert len(lesson_versions(course_id, lesson_id, teacher, db)) == 2
+    engine.dispose()
 
 
 def test_academic_completion_and_cohort_rules():

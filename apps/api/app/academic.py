@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session, defer
 from app.core.db import get_db
 from app.core.models import AcademicEvent, Activity, Attempt, Certificate, Cohort, CohortMember, Course, CourseUnit, Enrollment, LearningPath, Lesson, LessonProgress, LessonResource, LessonVersion, PathAssignment, PathCourse, PathVersion, Profile
 from app.core.security import get_current_profile
+from app.lesson_revisions import lesson_content_for_view
 
 router = APIRouter(tags=["academic"])
 EDITORS = {"superadmin", "admin", "coordinator", "teacher"}
@@ -309,7 +310,16 @@ def course_detail(course_id: uuid.UUID, profile: Profile = Depends(get_current_p
     activities = list(db.scalars(select(Activity).where(Activity.course_id == course.id).order_by(Activity.position)))
     result = summary(db, course, profile)
     result["units"] = [{"id": unit.id, "title": unit.title, "position": unit.position} for unit in db.scalars(select(CourseUnit).where(CourseUnit.course_id == course.id).order_by(CourseUnit.position))] if enrollment or profile.role in EDITORS else []
-    result["lessons"] = [{"id": item.id, "unit_id": item.unit_id, "title": item.title, "content": item.content, "position": item.position, "resources": [{"id": resource.id, "title": resource.title, "url": resource.url, "has_file": bool(resource.artifact_mime)} for resource in db.scalars(select(LessonResource).options(defer(LessonResource.artifact)).where(LessonResource.lesson_id == item.id))]} for item in lessons] if enrollment or profile.role in EDITORS else []
+    def lesson_view(item: Lesson) -> dict:
+        content, suggested = lesson_content_for_view(course.title, item.title, item.content, profile.role in EDITORS)
+        resources = [{"id": resource.id, "title": resource.title, "url": resource.url,
+                      "has_file": bool(resource.artifact_mime)}
+                     for resource in db.scalars(select(LessonResource).options(defer(LessonResource.artifact))
+                                                .where(LessonResource.lesson_id == item.id))]
+        return {"id": item.id, "unit_id": item.unit_id, "title": item.title, "content": content,
+                "suggested_content": suggested, "position": item.position, "resources": resources}
+
+    result["lessons"] = [lesson_view(item) for item in lessons] if enrollment or profile.role in EDITORS else []
     result["activities"] = [{"id": item.id, "title": item.title, "question": item.question, "kind": item.kind, "options": json.loads(item.options_json), "position": item.position, "max_attempts": item.max_attempts, "passing_score": item.passing_score, "weight": item.weight, "due_at": item.due_at, "rubric": item.rubric, **({"correct_index": item.correct_index, "correct_answer": item.correct_answer} if profile.role in EDITORS else {})} for item in activities] if enrollment or profile.role in EDITORS else []
     result["progress"] = progress(db, enrollment, lessons, activities) if enrollment else None
     if enrollment:
@@ -443,9 +453,17 @@ def draft_lesson(db: Session, profile: Profile, course_id: uuid.UUID, lesson_id:
 
 @router.patch("/courses/{course_id}/lessons/{lesson_id}")
 def edit_lesson(course_id: uuid.UUID, lesson_id: uuid.UUID, data: LessonInput, profile: Profile = Depends(get_current_profile), db: Session = Depends(get_db)):
-    lesson = draft_lesson(db, profile, course_id, lesson_id)
+    course = course_or_404(db, profile, course_id)
+    can_edit(profile, course)
+    lesson = db.scalar(select(Lesson).where(Lesson.id == lesson_id, Lesson.course_id == course.id))
+    if lesson is None:
+        raise HTTPException(404, "Lección no encontrada")
+    if course.published and "unit_id" in data.model_fields_set and data.unit_id != lesson.unit_id:
+        raise HTTPException(409, "No se puede mover una lección de unidad mientras el curso está publicado")
     if data.unit_id and not db.scalar(select(CourseUnit.id).where(CourseUnit.id == data.unit_id, CourseUnit.course_id == course_id)):
         raise HTTPException(404, "Unidad no encontrada")
+    if data.title.strip() == lesson.title and data.content.strip() == lesson.content:
+        return {"id": lesson.id, "title": lesson.title}
     last = db.scalar(select(func.max(LessonVersion.version)).where(LessonVersion.lesson_id == lesson.id)) or 0
     if not last:
         db.add(LessonVersion(lesson_id=lesson.id, version=1, title=lesson.title, content=lesson.content, changed_by=profile.id))

@@ -86,6 +86,18 @@ html[data-edumaster-theme='light'] body{background:#eaf3fd}.theme-light{color:#1
 .academic-form fieldset label, .academic-item fieldset label { display: flex; align-items: center; gap: 9px; margin: 8px 0; }
 .academic-item { border-top: 1px solid rgba(129,174,212,.25); padding: 14px 0; }
 .academic-content { white-space: pre-wrap; overflow-wrap: anywhere; }
+.academic-detail .academic-lesson-card { max-width: 860px; margin: 16px 0; padding: 20px 22px; border: 1px solid #30485d; border-radius: 10px; background: #0a1b2c; }
+.academic-lesson-card h4 { margin: 0 0 12px; font: 800 16px/1.4 Manrope,sans-serif; }
+.academic-lesson-card .academic-content { max-width: 72ch; line-height: 1.7; margin: 0 0 14px; color: #bfd1e0; }
+.academic-lesson-editor { max-width: 720px; margin: 16px 0 8px; border-top: 1px solid #30485d; padding-top: 12px; }
+.academic-lesson-editor summary { width: fit-content; color: #63d4ed; font-size: 12px; font-weight: 700; cursor: pointer; }
+.academic-lesson-editor .academic-form { padding-top: 14px; }
+.academic-lesson-editor textarea { min-height: 130px; }
+.academic-detail .assessment-list { max-width: 860px; }
+.theme-light .academic-detail .academic-lesson-card { background: #f5fbff; border-color: #b4d7ef; }
+.theme-light .academic-lesson-card .academic-content { color: #315a79; }
+.theme-light .academic-lesson-editor { border-color: #b4d7ef; }
+.theme-light .academic-lesson-editor summary { color: #087ca6; }
 .academic-link { background: transparent; border: 0; color: #58c8ee; cursor: pointer; font: inherit; text-align: left; text-decoration: underline; }
 .academic-message { padding: 14px 18px; border-radius: 10px; border: 1px solid #36bca0; }
 .academic-error { border-color: #f17a7a; }
