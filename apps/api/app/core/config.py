@@ -25,6 +25,8 @@ def database_url() -> str:
 
 
 def allowed_origins() -> list[str]:
+    if os.getenv("APP_ENV") == "production" and os.getenv("SAME_ORIGIN_ONLY") == "1":
+        return []
     return [origin.strip() for origin in os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",") if origin.strip()]
 
 
@@ -43,6 +45,10 @@ def validate_production_settings() -> None:
         raise RuntimeError("DATABASE_URL debe incluir host y credenciales en producción")
     if parse_qs(parsed_db.query).get("sslmode") != ["require"]:
         raise RuntimeError("DATABASE_URL debe usar sslmode=require en producción")
+    if os.getenv("SAME_ORIGIN_ONLY") == "1":
+        if os.getenv("CORS_ORIGINS"):
+            raise RuntimeError("No configures CORS_ORIGINS cuando SAME_ORIGIN_ONLY=1")
+        return
     if not os.getenv("CORS_ORIGINS") or not origins or any(
         not origin.startswith("https://") or "*" in origin or urlparse(origin).path not in {"", "/"}
         or not urlparse(origin).hostname or urlparse(origin).hostname in {"localhost", "127.0.0.1"}

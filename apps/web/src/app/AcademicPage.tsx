@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { supabase, type Profile } from './auth';
+import { apiBaseUrl, supabase, type Profile } from './auth';
 
 type Course = { id: string; title: string; description: string; published: boolean; enrolled: boolean; enrollment_count: number | null };
 type Lesson = { id: string; title: string; content: string; position: number };
@@ -8,11 +8,10 @@ type Detail = Course & { lessons: Lesson[]; activities: Activity[]; progress: { 
 type Attempt = { id: string; activity_id: string; score: number; selected_index: number };
 type Path = { id: string; title: string; description: string; courses: Course[] };
 
-const apiUrl = import.meta.env.VITE_API_URL as string | undefined;
 async function request<T>(path: string, method = 'GET', body?: unknown): Promise<T> {
   const session = (await supabase?.auth.getSession())?.data.session;
   if (!session) throw new Error('La sesión venció. Inicia sesión otra vez.');
-  const response = await fetch(`${apiUrl?.replace(/\/$/, '')}/api/v1${path}`, {
+  const response = await fetch(`${apiBaseUrl}/api/v1${path}`, {
     method, signal: AbortSignal.timeout(15000), headers: { Authorization: `Bearer ${session.access_token}`, ...(body ? { 'Content-Type': 'application/json' } : {}) },
     ...(body ? { body: JSON.stringify(body) } : {}),
   });

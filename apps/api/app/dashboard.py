@@ -1,6 +1,7 @@
 """Dashboard derived from academic records, with a private resumable SSE stream."""
 import asyncio
 import json
+import os
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -112,7 +113,10 @@ async def dashboard_stream(after: int = Query(default=0, ge=0), profile: Profile
 
     async def stream():
         cursor = after
-        for tick in range(100):  # reconnect after five minutes, without retaining a DB session
+        # Keep streams shorter than the Vercel function's 60-second limit.
+        # The browser reconnects with its last cursor; other hosts can stream
+        # for five minutes as before.
+        for tick in range(15 if os.getenv("VERCEL") else 100):
             try:
                 with Session(engine()) as db:
                     stmt = select(AcademicEvent).where(AcademicEvent.institution_id == org_id, AcademicEvent.id > cursor)

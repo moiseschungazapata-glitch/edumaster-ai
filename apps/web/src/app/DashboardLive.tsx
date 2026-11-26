@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { supabase, type Profile } from './auth';
+import { apiBaseUrl, supabase, type Profile } from './auth';
 
 export type DashboardData = {
   source: string; generated_at: string; period_days: number; cursor: number;
@@ -8,7 +8,7 @@ export type DashboardData = {
   recent_events: { id: number; title: string; kind: string; course_id: string | null; occurred_at: string }[];
 };
 type Course = { id: string; title: string };
-const apiUrl = import.meta.env.VITE_API_URL as string;
+const apiUrl = apiBaseUrl;
 const dateText = (value: string) => new Intl.DateTimeFormat('es-PE', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'America/Lima' }).format(new Date(value));
 
 export function useDashboard(profile: Profile | null, enabled = true) {

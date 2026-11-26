@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { supabase } from './auth';
+import { apiBaseUrl, supabase } from './auth';
 
 type Row = {
   date: string; course_id: string; enrollments: number; lesson_completions: number;
@@ -11,12 +11,11 @@ type Report = {
   totals: { enrollments: number; lesson_completions: number; assessment_passes: number; assessment_failures: number };
   courses: { id: string; title: string }[]; rows: Row[];
 };
-const api = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, '');
 
 async function authorizedFetch(path: string, signal?: AbortSignal): Promise<Response> {
   const session = (await supabase?.auth.getSession())?.data.session;
   if (!session) throw new Error('La sesión venció. Inicia sesión de nuevo.');
-  const response = await fetch(`${api}/api/v1/analytics${path}`, {
+  const response = await fetch(`${apiBaseUrl}/api/v1/analytics${path}`, {
     headers: { Authorization: `Bearer ${session.access_token}` },
     signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(15000)]) : AbortSignal.timeout(15000),
   });

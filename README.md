@@ -39,6 +39,8 @@ npm.cmd run dev
 
 Si `py -3.12` no está instalado, usa tu Python 3.11+ para crear `.venv`. No uses la URL de Vercel como `VITE_API_URL` hasta que FastAPI esté desplegada en un servicio accesible. Servir React en Vercel no despliega automáticamente la API.
 
+Para publicar **ambas aplicaciones en un solo proyecto Vercel**, sigue [la guía de un proyecto](docs/deploy-vercel-one-project.md) si tu cuenta muestra Framework Preset **Services**. Si no está disponible, utiliza [la guía de dos proyectos](docs/deploy-vercel.md), con raíces `apps/api` y `apps/web`.
+
 ### Comprobar
 
 - `http://localhost:8000/health/live` devuelve `{"status":"ok"}`.

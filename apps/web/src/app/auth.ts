@@ -1,9 +1,9 @@
 const url = import.meta.env.VITE_SUPABASE_URL;
 const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-const apiUrl = import.meta.env.VITE_API_URL;
+export const apiBaseUrl = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, '') || window.location.origin;
 const storageKey = 'edumaster-supabase-session';
 
-export const isConfigured = Boolean(url && key && apiUrl);
+export const isConfigured = Boolean(url && key);
 type Session = { access_token: string; refresh_token: string; expires_at: number };
 type AuthEvent = 'SIGNED_IN' | 'SIGNED_OUT';
 const subscribers = new Set<(event: AuthEvent) => void>();
@@ -109,8 +109,7 @@ export type Profile = {
 };
 
 export async function loadProfile(accessToken: string): Promise<Profile> {
-  if (!apiUrl) throw new Error('Falta configurar VITE_API_URL.');
-  const response = await fetch(`${apiUrl.replace(/\/$/, '')}/api/v1/me`, {
+  const response = await fetch(`${apiBaseUrl}/api/v1/me`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   if (!response.ok) throw new Error(response.status === 401 ? 'La sesión venció. Inicia sesión otra vez.' : 'No se pudo verificar el perfil en la API.');

@@ -1,6 +1,7 @@
 import pytest
+from sqlalchemy.pool import NullPool
 
-from app.core.config import validate_production_settings
+from app.core.config import allowed_origins, validate_production_settings
 from scripts.smoke_release import endpoint
 
 
@@ -28,3 +29,39 @@ def test_release_smoke_rejects_insecure_or_credential_urls():
     with pytest.raises(ValueError):
         endpoint("https://user:password@api.example.com")
     assert endpoint("http://127.0.0.1:8000", insecure_local=True) == "http://127.0.0.1:8000"
+
+
+def test_vercel_uses_short_lived_database_connections(monkeypatch):
+    from app.core import db
+
+    monkeypatch.setenv("VERCEL", "1")
+    monkeypatch.setattr(db, "database_url", lambda: "postgresql+psycopg://user:password@localhost/postgres")
+    create_engine = db.create_engine
+    seen = {}
+
+    def observe(url, **options):
+        seen.update(options)
+        return create_engine(url, **options)
+
+    monkeypatch.setattr(db, "create_engine", observe)
+    db.engine.cache_clear()
+    try:
+        instance = db.engine()
+        assert isinstance(instance.pool, NullPool)
+        assert seen["connect_args"]["prepare_threshold"] is None
+        instance.dispose()
+    finally:
+        db.engine.cache_clear()
+
+
+def test_single_project_disables_cross_origin_requests(monkeypatch):
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("SAME_ORIGIN_ONLY", "1")
+    monkeypatch.setenv("SUPABASE_URL", "https://demo.supabase.co")
+    monkeypatch.setenv("DATABASE_URL", "postgresql+psycopg://user:password@db.example.com/postgres?sslmode=require")
+    monkeypatch.delenv("CORS_ORIGINS", raising=False)
+    validate_production_settings()
+    assert allowed_origins() == []
+    monkeypatch.setenv("CORS_ORIGINS", "https://example.com")
+    with pytest.raises(RuntimeError, match="CORS_ORIGINS"):
+        validate_production_settings()
