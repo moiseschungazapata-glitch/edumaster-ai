@@ -50,6 +50,17 @@ def _date(value):
 
 
 def validate_examples(rows):
+    _validate_rows(rows)
+    ordered = sorted(rows, key=lambda r: (_date(r["as_of"]), r["student_key"]))
+    cut1, cut2 = int(len(rows) * .6), int(len(rows) * .8)
+    train, validation, test = ordered[:cut1], ordered[cut1:cut2], ordered[cut2:]
+    train = [row for row in train if _date(row["label_observed_at"]) < _date(validation[0]["as_of"])]
+    validation = [row for row in validation if _date(row["label_observed_at"]) < _date(test[0]["as_of"])]
+    _validate_partitions(train, validation, test)
+    return train, validation, test
+
+
+def _validate_rows(rows):
     if len(rows) < 100:
         raise ValueError("At least 100 labeled independent examples are required")
     keys = set()
@@ -73,17 +84,30 @@ def validate_examples(rows):
             raise ValueError("Invalid labels")
         if not row.get("segment"):
             raise ValueError("Segment missing")
-    ordered = sorted(rows, key=lambda r: (_date(r["as_of"]), r["student_key"]))
-    cut1, cut2 = int(len(rows) * .6), int(len(rows) * .8)
-    train, validation, test = ordered[:cut1], ordered[cut1:cut2], ordered[cut2:]
-    train = [row for row in train if _date(row["label_observed_at"]) < _date(validation[0]["as_of"])]
-    validation = [row for row in validation if _date(row["label_observed_at"]) < _date(test[0]["as_of"])]
+
+
+def _validate_partitions(train, validation, test):
     if len(train) < 50 or len(validation) < 20 or len(test) < 20:
         raise ValueError("Insufficient matured examples after purging label overlap")
     for partition in (train, validation, test):
         for label, classes in (("completion", 2), ("mastery", 3), ("risk", 2), ("next_resource", 3)):
             if set(row["labels"][label] for row in partition) != set(range(classes)):
                 raise ValueError(f"Insufficient label diversity for {label} in temporal split")
+
+
+def validate_oulad_examples(rows):
+    """Reserve entire presentations for validation and test, without learner overlap."""
+    _validate_rows(rows)
+    cohorts = ("2013B", "2013J", "2014J")
+    if {row.get("cohort") for row in rows} != set(cohorts):
+        raise ValueError("OULAD requires 2013B, 2013J and 2014J presentations")
+    partitions = [[row for row in rows if row["cohort"] == cohort] for cohort in cohorts]
+    train, validation, test = partitions
+    if max(_date(row["label_observed_at"]) for row in train) >= min(_date(row["as_of"]) for row in validation):
+        raise ValueError("Training labels overlap validation features")
+    if max(_date(row["label_observed_at"]) for row in validation) >= min(_date(row["as_of"]) for row in test):
+        raise ValueError("Validation labels overlap test features")
+    _validate_partitions(train, validation, test)
     return train, validation, test
 
 
@@ -95,3 +119,11 @@ def dataset_hash(rows):
 def load_labeled(path: Path):
     with path.open(encoding="utf-8") as file:
         return [json.loads(line) for line in file if line.strip()]
+
+
+def load_oulad(path: Path):
+    rows = load_labeled(path)
+    manifest = json.loads(path.with_suffix(".manifest.json").read_text(encoding="utf-8"))
+    if manifest.get("source") != "OULAD/UCI" or manifest.get("dataset_version") != dataset_hash(rows):
+        raise ValueError("OULAD manifest does not match the labeled dataset")
+    return rows

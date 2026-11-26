@@ -18,7 +18,7 @@ from sklearn.metrics import (
 from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 
-from app.ml.data import FEATURES, LABELS, SCHEMA, STEPS, _date, dataset_hash, demo_examples, load_labeled, validate_examples
+from app.ml.data import FEATURES, LABELS, SCHEMA, STEPS, _date, dataset_hash, demo_examples, load_labeled, load_oulad, validate_examples, validate_oulad_examples
 
 
 class MultiTaskNetwork(nn.Module):
@@ -198,15 +198,15 @@ def _flatten(prefix, value):
 def run(source, data_path, output, seed=27, epochs=40):
     if source == "demo":
         rows = demo_examples(seed=seed)
-    elif source == "labeled":
+    elif source in {"labeled", "oulad"}:
         if data_path is None:
-            raise ValueError("A labeled, authorized JSONL file is required")
-        rows = load_labeled(Path(data_path))
+            raise ValueError("A labeled JSONL file is required")
+        rows = load_oulad(Path(data_path)) if source == "oulad" else load_labeled(Path(data_path))
         if any(_date(row["label_observed_at"]) > datetime.now(timezone.utc) for row in rows):
             raise ValueError("Future outcome labels are not mature")
     else:
         raise ValueError("Unknown source")
-    train, validation, test = validate_examples(rows)
+    train, validation, test = (validate_oulad_examples(rows) if source == "oulad" else validate_examples(rows))
     baseline_metrics = baseline(train, test)
     model, scaler, history, metrics = train_model(train, validation, test, seed, epochs)
     output = Path(output)
@@ -225,9 +225,11 @@ def run(source, data_path, output, seed=27, epochs=40):
         "mastery_macro_f1_improved": metrics["mastery"]["macro_f1"] > baseline_metrics["mastery"]["macro_f1"],
         "ranking_ndcg_improved": metrics["ranking"]["ndcg_at_3"] > baseline_metrics["ranking"]["ndcg_at_3"],
     }
+    source_name = {"demo": "synthetic-demo", "labeled": "authorized-labeled", "oulad": "public-oulad-benchmark"}[source]
+    status = {"demo": "demo_only", "labeled": "candidate_pending_human_review", "oulad": "external_validation_only"}[source]
     result = {
-        "source": "synthetic-demo" if source == "demo" else "authorized-labeled",
-        "status": "demo_only" if source == "demo" else "candidate_pending_human_review",
+        "source": source_name,
+        "status": status,
         "schema": SCHEMA, "data_version": data_version, "model_version": digest,
         "git_commit": commit, "seed": seed, "epochs_trained": len(history),
         "split": {"train": len(train), "validation": len(validation), "test": len(test),
@@ -236,7 +238,11 @@ def run(source, data_path, output, seed=27, epochs=40):
     }
     (output / "evaluation.json").write_text(json.dumps(result, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     (output / "history.json").write_text(json.dumps(history, indent=2) + "\n", encoding="utf-8")
-    card = f"""# Model card: EduMaster multitarea\n\n- Estado: {result['status']}. Sin inferencia en producción.\n- Fuente: {result['source']}; versión dataset: {data_version}.\n- Esquema: {SCHEMA}; corte cronológico, separación con purga de etiquetas futuras.\n- Muestras: {result['split']}.\n- Arquitectura: GRU + capa densa/LayerNorm/Dropout; finalización, dominio ordinal, riesgo y ranking de tres opciones.\n- Baseline: prevalencias del entrenamiento, sin información del conjunto de prueba.\n- Evaluación: ver evaluation.json y history.json; métricas calculadas sobre el test temporal una sola vez.\n- Segmentos: {list(metrics['segments'])}. Los segmentos no son una auditoría de equidad completa.\n- Limitaciones: las etiquetas sintéticas no demuestran utilidad real, causalidad ni calibración en estudiantes. La exportación agregada de fase 4 no tiene etiquetas por alumno.\n- Uso prohibido: notas definitivas, sanciones, decisiones de acceso y recomendaciones personalizadas en producción.\n- Siguiente puerta: cohorte etiquetada, autorizada y suficiente; revisión técnica, docente, de privacidad y aprobación explícita antes de staging/shadow.\n- Rollback: no hay despliegue ni promoción automática; descartar candidate.pt y mantener las fases 1–4.\n"""
+    limitation = ("OULAD son datos anonimizados de otra institución. El objetivo next_resource representa la categoría de actividad futura observada, no el mejor recurso pedagógico; no se puede usar como recomendador. La evaluación no prueba transferencia a EduMaster."
+                  if source == "oulad" else
+                  "Las etiquetas sintéticas no demuestran utilidad real, causalidad ni calibración en estudiantes." if source == "demo" else
+                  "La evaluación offline no sustituye la revisión técnica, docente, de privacidad ni la validación en EduMaster.")
+    card = f"""# Model card: EduMaster multitarea\n\n- Estado: {result['status']}. Sin inferencia en producción.\n- Fuente: {result['source']}; versión dataset: {data_version}.\n- Atribución OULAD si aplica: Kuzilek, Hlosta y Zdrahal; DOI 10.24432/C5KK69; CC BY 4.0.\n- Esquema: {SCHEMA}; corte cronológico, separación con purga de etiquetas futuras.\n- Muestras: {result['split']}.\n- Arquitectura: GRU + capa densa/LayerNorm/Dropout; finalización, dominio ordinal, riesgo y ranking de tres opciones.\n- Baseline: prevalencias del entrenamiento, sin información del conjunto de prueba.\n- Evaluación: ver evaluation.json y history.json; métricas calculadas sobre el test temporal una sola vez.\n- Segmentos: {list(metrics['segments'])}. Los segmentos no son una auditoría de equidad completa.\n- Limitaciones: {limitation}\n- Uso prohibido: notas definitivas, sanciones, decisiones de acceso y recomendaciones personalizadas en producción.\n- Siguiente puerta: cohorte etiquetada, autorizada y suficiente de EduMaster; revisión técnica, docente, de privacidad y aprobación explícita antes de staging/shadow.\n- Rollback: no hay despliegue ni promoción automática; descartar candidate.pt y mantener las fases 1–4.\n"""
     (output / "model_card.md").write_text(card, encoding="utf-8")
     tracking_db = (output.parent / "mlruns" / "tracking.db").resolve()
     tracking_db.parent.mkdir(parents=True, exist_ok=True)
@@ -266,7 +272,7 @@ def run(source, data_path, output, seed=27, epochs=40):
 
 def main():
     parser = argparse.ArgumentParser(description="Train an offline candidate, never promote automatically.")
-    parser.add_argument("--source", choices=("demo", "labeled"), required=True)
+    parser.add_argument("--source", choices=("demo", "labeled", "oulad"), required=True)
     parser.add_argument("--data", type=Path)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--seed", type=int, default=27)

@@ -9,3 +9,6 @@ __pycache__/
 data/analytics/
 data/models/
 data/mlruns/
+data/external/
+data/oulad/
+data/uv-cache/

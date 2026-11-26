@@ -137,7 +137,28 @@ La ejecución DEMO genera `candidate.pt` (pesos y transformadores), `evaluation.
 
 **Datos reales:** el CSV agregado de fase 4 contiene una sola fila en la institución de prueba y no incluye objetivos futuros por estudiante. No sirve para entrenamiento supervisado. El modo `--source labeled --data ruta.jsonl --out ..\..\data\models\real` exige un archivo autorizado de al menos 100 alumnos con una instantánea por alumno. Cada línea JSONL debe seguir el esquema `student-sequence-supervised-v1`: `student_key` seudónimo único, `segment`, `as_of`, `feature_window_end`, `label_observed_at` con zona horaria, `sequence` de seis vectores de cuatro números [0,1] en el orden `progress,assessment,visits,inactive_days`, y `labels` con `completion` y `risk` binarios, `mastery` y `next_resource` entre 0 y 2. Las variables deben preceder al corte y las etiquetas deben madurar después. El pipeline bloquea duplicados, fechas futuras, falta de diversidad de clases, conjuntos demasiado pequeños y solapamiento temporal entre entrenamiento/validación/test. No uses datos personales ni un dataset que no esté autorizado para esta finalidad.
 
-El candidato real permanece `candidate_pending_human_review` incluso si mejora al baseline. La revisión técnica, docente, de privacidad, estabilidad y equidad por segmentos es necesaria antes de promoverlo a staging/shadow. No hay endpoint de inferencia, entrenamiento automático, publicación, calificaciones definitivas ni sanciones en esta fase. Con los datos actuales, solo está validado el **pipeline DEMO**; no es correcto declarar un modelo real listo para producción.
+El candidato entrenado con datos propios permanece `candidate_pending_human_review` incluso si mejora al baseline. La revisión técnica, docente, de privacidad, estabilidad y equidad por segmentos es necesaria antes de promoverlo a staging/shadow. No hay endpoint de inferencia, entrenamiento automático, publicación, calificaciones definitivas ni sanciones en esta fase. Con los datos actuales de EduMaster no se puede declarar un modelo listo para producción.
+
+### Benchmark público OULAD (evaluación offline)
+
+Se incorporó un adaptador reproducible para [OULAD de UCI](https://archive.ics.uci.edu/dataset/349/open+university+learning+analytics+dataset), creado por Kuzilek, Hlosta y Zdrahal (DOI [10.24432/C5KK69](https://doi.org/10.24432/C5KK69), licencia CC BY 4.0). Descarga el ZIP oficial desde la raíz del repositorio:
+
+```powershell
+New-Item -ItemType Directory -Path data\external -Force | Out-Null
+Invoke-WebRequest -Uri 'https://archive.ics.uci.edu/static/public/349/open%2Buniversity%2Blearning%2Banalytics%2Bdataset.zip' -OutFile data\external\oulad.zip
+cd apps\api
+```
+
+Después ejecuta:
+
+```powershell
+.\.venv\Scripts\python.exe -m app.ml.oulad --archive ..\..\data\external\oulad.zip --out ..\..\data\oulad\student_sequences.jsonl
+.\.venv\Scripts\python.exe -m app.ml.train --source oulad --data ..\..\data\oulad\student_sequences.jsonl --out ..\..\data\models\oulad --epochs 20
+```
+
+El adaptador transmite el CSV de interacciones sin extraerlo, toma una sola presentación por alumno y excluye a quien ya se retiró antes del corte. Produce seis semanas de señales hasta el día 42: proporción de evaluaciones enviadas, promedio de nota conocida, clics semanales y días sin actividad. Los resultados finales y la categoría de actividad observada entre los días 43 y 70 son etiquetas futuras. El entrenamiento usa 2013B, valida con 2013J y prueba con 2014J; 2014B queda fuera por el solapamiento temporal. El manifiesto documenta procedencia, volumen y hash. Los archivos descargados, derivados y pesos permanecen fuera de Git.
+
+**Límites del benchmark:** OULAD publica fechas relativas a cada presentación; el adaptador usa febrero/octubre como fechas de referencia y el final del módulo como fecha *aproximada* de maduración del resultado, no fechas exactas de publicación. Los alumnos sin interacción posterior al corte se excluyen porque falta la cuarta etiqueta; esto introduce sesgo de selección. `next_resource` es la categoría de interacción futura más frecuente (contenido, discusión o práctica), **no** una recomendación pedagógica correcta. La exactitud en una universidad británica de 2013–2014 no valida transferencia a EduMaster. El candidato queda como `external_validation_only`, no activa `/model/predict` ni cambia el indicador DEMO de producción. Para habilitar inferencia sobre alumnos de EduMaster se requieren datos propios autorizados, etiquetas maduras, evaluación local, revisión docente/técnica y monitoreo.
 
 ## Fase 6: orientación y recomendaciones supervisadas
 
