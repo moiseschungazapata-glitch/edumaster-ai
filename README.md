@@ -46,6 +46,14 @@ Si `py -3.12` no está instalado, usa tu Python 3.11+ para crear `.venv`. No use
 - `http://localhost:8000/docs` muestra OpenAPI.
 - En `http://localhost:5173`, inicia sesión con el usuario creado en Supabase. Recargar conserva la sesión; cerrar sesión la elimina. Sin token válido, `/api/v1/me` responde 401; sin rol admin, `/api/v1/admin/ping` responde 403.
 
+Para verificar **solo la integración con Supabase** desde una terminal con acceso a internet, ejecuta en `apps/api`:
+
+```powershell
+.\.venv\Scripts\python.exe -m scripts.check_supabase
+```
+
+La comprobación es de solo lectura y no muestra contraseñas, tokens ni correos. Compara los proyectos de web, API y PostgreSQL; consulta las claves públicas de autenticación; y comprueba la migración `0005_audit`, las tablas y RLS. Si falla por conectividad, ejecútala desde tu PC con internet. Una salida correcta aún requiere iniciar sesión como docente y estudiante y probar un curso, una matrícula y la persistencia tras recargar; estas operaciones no se realizan automáticamente.
+
 ## Calidad y ambientes
 
 ```powershell
