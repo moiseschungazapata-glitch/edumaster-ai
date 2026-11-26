@@ -20,6 +20,9 @@ NAMES = {
     "course_created": "Curso creado", "course_published": "Curso publicado", "enrolled": "Nueva matrícula",
     "lesson_completed": "Lección completada", "assessment_passed": "Evaluación aprobada",
     "assessment_failed": "Evaluación respondida", "path_created": "Ruta creada",
+    "assessment_submitted": "Actividad enviada para revisión", "cohort_enrolled": "Cohorte matriculada",
+    "certificate_issued": "Certificado emitido", "certificate_revoked": "Certificado anulado",
+    "certificate_reissued": "Certificado reemitido", "path_published": "Ruta publicada",
 }
 
 

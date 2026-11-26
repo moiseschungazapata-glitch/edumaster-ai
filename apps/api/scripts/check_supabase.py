@@ -15,11 +15,13 @@ from sqlalchemy import create_engine, text
 from app.core.config import database_url, supabase_url
 
 
-EXPECTED_MIGRATION = "0005_audit"
+EXPECTED_MIGRATION = "0006_academic_completion"
 REQUIRED_TABLES = {
     "institutions", "profiles", "courses", "lessons", "activities", "attempts",
     "enrollments", "lesson_progress", "learning_paths", "path_courses",
     "academic_events", "recommendations", "audit_records",
+    "cohorts", "cohort_members", "course_units", "lesson_resources", "lesson_versions",
+    "path_assignments", "certificates",
 }
 
 

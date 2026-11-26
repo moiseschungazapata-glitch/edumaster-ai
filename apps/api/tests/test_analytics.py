@@ -36,6 +36,9 @@ def test_dataset_is_deterministic_and_rejects_bad_input(tmp_path):
     assert not (tmp_path / "invalid").exists()
     invalid, quality, _ = build_dataset([{**good, "occurred_at": "2026-01-01T10:00:00"}])
     assert invalid == [] and quality["rejected"] == 1
+    pending_rows, pending_quality, _ = build_dataset([good, {**good, "id": 3, "kind": "assessment_submitted"}])
+    assert pending_quality["accepted"] == 2 and pending_quality["rejected"] == 0
+    assert pending_rows[0]["assessment_failures"] == 0
 
 
 def test_analytics_respects_institution_role_and_export():
